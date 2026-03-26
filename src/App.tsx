@@ -363,6 +363,7 @@ export default function App() {
     if (!book) return;
 
     const newPage = Math.max(0, Math.min(page, book.totalPages));
+    if (newPage === book.currentPage) return;
     
     // Optimistically update local state
     setBooks(prev => prev.map(b => b.id === id ? { ...b, currentPage: newPage } : b));
@@ -795,19 +796,30 @@ export default function App() {
                                       </div>
                                     </div>
                                     
-                                    <div className="space-y-1">
-                                      <div className="flex justify-between text-[7px] md:text-[9px] uppercase tracking-widest text-text-muted">
-                                        <span>{book.currentPage}/{book.totalPages}</span>
+                                    <div className="space-y-2">
+                                      <div className="flex justify-between items-center">
+                                        <div className="flex items-center gap-1">
+                                          <input 
+                                            type="number"
+                                            min="0"
+                                            max={book.totalPages}
+                                            value={book.currentPage}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) => updateProgress(book.id, parseInt(e.target.value) || 0)}
+                                            className="w-12 md:w-16 bg-bg border border-border rounded px-1 py-0.5 text-[10px] md:text-xs text-white focus:border-accent outline-none font-mono"
+                                          />
+                                          <span className="text-[8px] md:text-[10px] text-text-muted">/ {book.totalPages}</span>
+                                        </div>
+                                        <span className="text-[8px] md:text-[10px] text-accent font-bold">
+                                          {Math.round((book.currentPage / book.totalPages) * 100) || 0}%
+                                        </span>
                                       </div>
-                                      <input 
-                                        type="range"
-                                        min="0"
-                                        max={book.totalPages}
-                                        value={book.currentPage}
-                                        onClick={(e) => e.stopPropagation()}
-                                        onChange={(e) => updateProgress(book.id, parseInt(e.target.value))}
-                                        className="w-full h-1 bg-bg rounded-full appearance-none cursor-pointer accent-accent"
-                                      />
+                                      <div className="h-1 w-full bg-bg rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-accent transition-all duration-300" 
+                                          style={{ width: `${(book.currentPage / book.totalPages) * 100}%` }}
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                 </motion.div>
@@ -1179,8 +1191,18 @@ export default function App() {
                           </span>
                         </div>
                       )}
-                      <div className="text-[10px] uppercase tracking-widest text-text-muted font-bold">
-                        {currentBookDetail.currentPage} / {currentBookDetail.totalPages} Pages
+                      <div className="flex items-center gap-2">
+                        <input 
+                          type="number"
+                          min="0"
+                          max={currentBookDetail.totalPages}
+                          value={currentBookDetail.currentPage}
+                          onChange={(e) => updateProgress(currentBookDetail.id, parseInt(e.target.value) || 0)}
+                          className="w-16 bg-bg/50 border border-border rounded px-2 py-1 text-xs text-white focus:border-accent outline-none font-mono"
+                        />
+                        <span className="text-[10px] uppercase tracking-widest text-text-muted font-bold">
+                          / {currentBookDetail.totalPages} Pages
+                        </span>
                       </div>
                     </div>
                   </div>
