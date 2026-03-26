@@ -1194,12 +1194,23 @@ export default function App() {
               <BarcodeScanner 
                 onScanSuccess={(isbn) => fetchBookByISBN(isbn)}
               />
-              <button 
-                onClick={() => setIsScanning(false)}
-                className="btn-secondary w-full mt-6"
-              >
-                Cancel
-              </button>
+              <div className="grid grid-cols-2 gap-3 mt-6">
+                <button 
+                  onClick={() => {
+                    setIsScanning(false);
+                    setIsAddBookModalOpen(true);
+                  }}
+                  className="btn-primary py-4"
+                >
+                  Manual Entry
+                </button>
+                <button 
+                  onClick={() => setIsScanning(false)}
+                  className="btn-secondary py-4"
+                >
+                  Cancel
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
