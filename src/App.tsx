@@ -42,7 +42,8 @@ import {
   eachDayOfInterval,
   parseISO
 } from "date-fns";
-import { Book, Series } from "./types";
+import { debounce } from "lodash";
+import { Book, Series, Chapter } from "./types";
 import BarcodeScanner from "./components/BarcodeScanner";
 import { auth, db, signInWithGoogle, logOut, handleFirestoreError, OperationType } from "./firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
@@ -60,6 +61,9 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [isFetchingBook, setIsFetchingBook] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [selectedBookForDetail, setSelectedBookForDetail] = useState<Book | null>(null);
+
+  const currentBookDetail = books.find(b => b.id === selectedBookForDetail?.id);
 
   const [newBook, setNewBook] = useState({
     title: "",
@@ -70,6 +74,7 @@ export default function App() {
     isWishlist: false,
     isDragonBook: false,
     coverUrl: "",
+    chapters: [] as Chapter[],
   });
 
   const [newSeries, setNewSeries] = useState({
@@ -148,6 +153,7 @@ export default function App() {
       let author = "";
       let totalPages = 0;
       let coverUrl = "";
+      let chapters: Chapter[] = [];
 
       if (data.items && data.items.length > 0) {
         // Try to find an item with pageCount
@@ -160,22 +166,28 @@ export default function App() {
         coverUrl = bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : "";
       }
 
-      // If pageCount is still 0, try OpenLibrary API as fallback
-      if (totalPages === 0) {
-        try {
-          const olResponse = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-          const olData = await olResponse.json();
-          const olBook = olData[`ISBN:${isbn}`];
+      // Try OpenLibrary for more details and chapters
+      try {
+        const olResponse = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
+        const olData = await olResponse.json();
+        const olBook = olData[`ISBN:${isbn}`];
+        
+        if (olBook) {
+          if (!title) title = olBook.title || "";
+          if (!author) author = olBook.authors ? olBook.authors.map((a: any) => a.name).join(", ") : "";
+          if (totalPages === 0 && olBook.number_of_pages) totalPages = olBook.number_of_pages;
+          if (!coverUrl && olBook.cover) coverUrl = olBook.cover.large || olBook.cover.medium || olBook.cover.small;
           
-          if (olBook) {
-            if (!title) title = olBook.title || "";
-            if (!author) author = olBook.authors ? olBook.authors.map((a: any) => a.name).join(", ") : "";
-            if (olBook.number_of_pages) totalPages = olBook.number_of_pages;
-            if (!coverUrl && olBook.cover) coverUrl = olBook.cover.large || olBook.cover.medium || olBook.cover.small;
+          if (olBook.table_of_contents) {
+            chapters = olBook.table_of_contents.map((item: any, index: number) => ({
+              id: `chapter-${index}-${Date.now()}`,
+              title: item.title || `Chapter ${index + 1}`,
+              notes: ""
+            }));
           }
-        } catch (olError) {
-          console.error("OpenLibrary fallback failed:", olError);
         }
+      } catch (olError) {
+        console.error("OpenLibrary fetch failed:", olError);
       }
 
       if (title || author || totalPages > 0) {
@@ -184,7 +196,8 @@ export default function App() {
           title: title || prev.title,
           author: author || prev.author,
           totalPages: totalPages || prev.totalPages,
-          coverUrl: coverUrl || prev.coverUrl || `https://picsum.photos/seed/${isbn}/400/600`
+          coverUrl: coverUrl || prev.coverUrl || `https://picsum.photos/seed/${isbn}/400/600`,
+          chapters: chapters.length > 0 ? chapters : prev.chapters
         }));
         setIsScanning(false);
       } else {
@@ -224,7 +237,7 @@ export default function App() {
     try {
       await setDoc(doc(db, "books", bookId), book);
       setIsAddBookModalOpen(false);
-      setNewBook({ title: "", author: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "" });
+      setNewBook({ title: "", author: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "", chapters: [] });
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, "books");
     }
@@ -276,26 +289,86 @@ export default function App() {
   const deleteBook = async (id: string) => {
     try {
       await deleteDoc(doc(db, "books", id));
+      if (selectedBookForDetail?.id === id) {
+        setSelectedBookForDetail(null);
+      }
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, "books");
     }
   };
 
-  const updateProgress = async (id: string, page: number) => {
+  const addChapter = async (bookId: string) => {
+    const book = books.find(b => b.id === bookId);
+    if (!book) return;
+
+    const newChapter: Chapter = {
+      id: `chapter-${Date.now()}`,
+      title: `Chapter ${(book.chapters?.length || 0) + 1}`,
+      notes: ""
+    };
+
+    const updatedChapters = [...(book.chapters || []), newChapter];
+    try {
+      await updateDoc(doc(db, "books", bookId), { chapters: updatedChapters });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, "books");
+    }
+  };
+
+  const updateChapter = async (bookId: string, chapterId: string, updates: Partial<Chapter>) => {
+    const book = books.find(b => b.id === bookId);
+    if (!book || !book.chapters) return;
+
+    const updatedChapters = book.chapters.map(c => 
+      c.id === chapterId ? { ...c, ...updates } : c
+    );
+
+    try {
+      await updateDoc(doc(db, "books", bookId), { chapters: updatedChapters });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, "books");
+    }
+  };
+
+  const deleteChapter = async (bookId: string, chapterId: string) => {
+    const book = books.find(b => b.id === bookId);
+    if (!book || !book.chapters) return;
+
+    const updatedChapters = book.chapters.filter(c => c.id !== chapterId);
+
+    try {
+      await updateDoc(doc(db, "books", bookId), { chapters: updatedChapters });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, "books");
+    }
+  };
+
+  const debouncedUpdate = useMemo(
+    () => debounce(async (id: string, page: number, totalPages: number, finishedDate: string | null) => {
+      const isFinished = page >= totalPages && totalPages > 0;
+      try {
+        await updateDoc(doc(db, "books", id), {
+          currentPage: page,
+          finishedDate: isFinished ? (finishedDate || new Date().toISOString()) : null
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, "books");
+      }
+    }, 500),
+    []
+  );
+
+  const updateProgress = (id: string, page: number) => {
     const book = books.find(b => b.id === id);
     if (!book) return;
 
     const newPage = Math.max(0, Math.min(page, book.totalPages));
-    const isFinished = newPage >= book.totalPages && book.totalPages > 0;
     
-    try {
-      await updateDoc(doc(db, "books", id), {
-        currentPage: newPage,
-        finishedDate: isFinished ? (book.finishedDate || new Date().toISOString()) : null
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, "books");
-    }
+    // Optimistically update local state
+    setBooks(prev => prev.map(b => b.id === id ? { ...b, currentPage: newPage } : b));
+    
+    // Debounce the database update
+    debouncedUpdate(id, newPage, book.totalPages, book.finishedDate);
   };
 
   const toggleRead = async (id: string) => {
@@ -455,7 +528,7 @@ export default function App() {
                         key={book.id}
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
-                        onClick={() => setEditingBookNotes(book)}
+                        onClick={() => setSelectedBookForDetail(book)}
                         className="w-5 h-8 sm:w-8 sm:h-12 md:w-12 md:h-18 rounded-[2px] md:rounded-sm overflow-hidden border border-bg shadow-lg cursor-pointer hover:scale-110 transition-transform relative group"
                         style={{ outline: series ? `1px solid ${series.color}` : 'none', outlineOffset: '1px' }}
                       >
@@ -703,7 +776,12 @@ export default function App() {
                             {seriesBooks.map((book) => {
                               const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
                               return (
-                                <div key={book.id} className="card p-2 flex flex-col gap-2 group/book relative">
+                                <motion.div 
+                                  key={book.id} 
+                                  layoutId={book.id}
+                                  onClick={() => setSelectedBookForDetail(book)}
+                                  className="card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all"
+                                >
                                   <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border">
                                     <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" />
                                   </div>
@@ -714,14 +792,6 @@ export default function App() {
                                           {book.title}
                                         </h3>
                                         <p className="text-[9px] md:text-xs text-text-muted italic truncate">{book.author}</p>
-                                      </div>
-                                      <div className="flex gap-1">
-                                        <button onClick={() => setEditingBookNotes(book)} className="p-1 text-text-muted hover:text-accent transition-colors">
-                                          <MessageSquare className="w-3 h-3 md:w-4 md:h-4" />
-                                        </button>
-                                        <button onClick={() => toggleRead(book.id)} className={`flex-shrink-0 transition-colors ${isRead ? 'text-accent' : 'text-text-muted hover:text-accent'}`}>
-                                          {isRead ? <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4" /> : <Circle className="w-3 h-3 md:w-4 md:h-4" />}
-                                        </button>
                                       </div>
                                     </div>
                                     
@@ -734,18 +804,13 @@ export default function App() {
                                         min="0"
                                         max={book.totalPages}
                                         value={book.currentPage}
+                                        onClick={(e) => e.stopPropagation()}
                                         onChange={(e) => updateProgress(book.id, parseInt(e.target.value))}
                                         className="w-full h-1 bg-bg rounded-full appearance-none cursor-pointer accent-accent"
                                       />
                                     </div>
                                   </div>
-                                  <button 
-                                    onClick={() => deleteBook(book.id)}
-                                    className="absolute top-1 right-1 p-1 bg-bg/60 backdrop-blur-sm rounded-full text-text-muted opacity-0 group-hover/book:opacity-100 hover:text-red-400 transition-all"
-                                  >
-                                    <Trash2 className="w-3 h-3" />
-                                  </button>
-                                </div>
+                                </motion.div>
                               );
                             })}
                             <button 
@@ -824,7 +889,12 @@ export default function App() {
               className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
             >
               {wishlistBooks.map(book => (
-                <div key={book.id} className="card p-3 flex flex-col gap-3 group/wish relative">
+                <motion.div 
+                  key={book.id} 
+                  layoutId={book.id}
+                  onClick={() => setSelectedBookForDetail(book)}
+                  className="card p-3 flex flex-col gap-3 group/wish relative cursor-pointer hover:border-accent transition-all"
+                >
                   <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border">
                     <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   </div>
@@ -832,21 +902,7 @@ export default function App() {
                     <h3 className="font-serif text-sm leading-tight truncate text-white">{book.title}</h3>
                     <p className="text-[10px] text-text-muted italic truncate">{book.author}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => {
-                        setBookToMove(book);
-                        setIsSelectSeriesModalOpen(true);
-                      }}
-                      className="flex-1 py-2 bg-accent/10 text-accent rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-accent hover:text-bg transition-colors"
-                    >
-                      Bought
-                    </button>
-                    <button onClick={() => deleteBook(book.id)} className="p-2 text-text-muted hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                </motion.div>
               ))}
               <button 
                 onClick={() => {
@@ -870,7 +926,12 @@ export default function App() {
               className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"
             >
               {dragonBooks.map(book => (
-                <div key={book.id} className="card p-3 flex flex-col gap-3 group/dragon relative">
+                <motion.div 
+                  key={book.id} 
+                  layoutId={book.id}
+                  onClick={() => setSelectedBookForDetail(book)}
+                  className="card p-3 flex flex-col gap-3 group/dragon relative cursor-pointer hover:border-accent transition-all"
+                >
                   <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border">
                     <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   </div>
@@ -878,15 +939,7 @@ export default function App() {
                     <h3 className="font-serif text-sm leading-tight truncate text-white">{book.title}</h3>
                     <p className="text-[10px] text-text-muted italic truncate">{book.author}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => setEditingBookNotes(book)} className="flex-1 py-2 bg-accent/10 text-accent rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-accent hover:text-bg transition-colors">
-                      Journal
-                    </button>
-                    <button onClick={() => deleteBook(book.id)} className="p-2 text-text-muted hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
+                </motion.div>
               ))}
               <button 
                 onClick={() => {
@@ -1096,86 +1149,124 @@ export default function App() {
           </div>
         )}
 
-        {editingBookNotes && (
+        {currentBookDetail && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setEditingBookNotes(null)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-lg card p-8 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-18 rounded overflow-hidden border border-border shadow-lg">
-                    <img src={editingBookNotes.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedBookForDetail(null)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
+            <motion.div 
+              layoutId={currentBookDetail.id}
+              className="relative w-full max-w-2xl card p-0 max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              {/* Header with Cover Background */}
+              <div className="relative h-48 md:h-64 overflow-hidden flex-shrink-0">
+                <img src={currentBookDetail.coverUrl} className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110" referrerPolicy="no-referrer" />
+                <div className="absolute inset-0 bg-gradient-to-t from-surface to-transparent" />
+                <div className="absolute inset-0 p-6 flex items-end gap-6">
+                  <div className="w-24 h-36 md:w-32 md:h-48 rounded-xl overflow-hidden border border-border shadow-2xl flex-shrink-0">
+                    <img src={currentBookDetail.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-serif font-bold">{editingBookNotes.title}</h3>
-                    {editingBookNotes.seriesId && (
-                      <div className="flex items-center gap-2 mt-1">
-                        <div 
-                          className="w-2 h-2 rounded-full" 
-                          style={{ backgroundColor: seriesList.find(s => s.id === editingBookNotes.seriesId)?.color }} 
-                        />
-                        <span className="text-[10px] uppercase tracking-widest text-text-muted font-bold">
-                          {seriesList.find(s => s.id === editingBookNotes.seriesId)?.title}
-                        </span>
+                  <div className="flex-1 min-w-0 pb-2">
+                    <h3 className="text-2xl md:text-4xl font-serif font-bold text-white truncate">{currentBookDetail.title}</h3>
+                    <p className="text-sm md:text-xl text-text-muted italic truncate">{currentBookDetail.author}</p>
+                    <div className="flex items-center gap-4 mt-4">
+                      {currentBookDetail.seriesId && (
+                        <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-surface border border-border">
+                          <div 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: seriesList.find(s => s.id === currentBookDetail.seriesId)?.color }} 
+                          />
+                          <span className="text-[10px] uppercase tracking-widest text-text-muted font-bold">
+                            {seriesList.find(s => s.id === currentBookDetail.seriesId)?.title}
+                          </span>
+                        </div>
+                      )}
+                      <div className="text-[10px] uppercase tracking-widest text-text-muted font-bold">
+                        {currentBookDetail.currentPage} / {currentBookDetail.totalPages} Pages
                       </div>
-                    )}
+                    </div>
                   </div>
+                  <button onClick={() => setSelectedBookForDetail(null)} className="absolute top-6 right-6 p-2 bg-bg/20 backdrop-blur-md rounded-full text-white hover:bg-bg/40 transition-all">
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
-                <button onClick={() => setEditingBookNotes(null)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
               </div>
 
-              <div className="space-y-8">
-                {/* Existing Entries */}
-                <div className="space-y-4">
-                  <h4 className="text-[10px] uppercase tracking-[0.2em] text-accent font-bold">Journal History</h4>
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => {
+                      if (window.confirm("Are you sure you want to delete this book?")) {
+                        deleteBook(currentBookDetail.id);
+                      }
+                    }}
+                    className="flex-1 py-4 rounded-2xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                  >
+                    <Trash2 className="w-4 h-4" /> Delete Book
+                  </button>
+                  {currentBookDetail.isWishlist && (
+                    <button 
+                      onClick={() => {
+                        setBookToMove(currentBookDetail);
+                        setIsSelectSeriesModalOpen(true);
+                        setSelectedBookForDetail(null);
+                      }}
+                      className="flex-1 py-4 rounded-2xl bg-accent/10 text-accent border border-accent/20 hover:bg-accent hover:text-bg transition-all font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+                    >
+                      <ShoppingBag className="w-4 h-4" /> I Bought This
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs uppercase tracking-[0.2em] text-accent font-bold">Chapters & Notes</h4>
+                    <button 
+                      onClick={() => addChapter(currentBookDetail.id)}
+                      className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-text-muted hover:text-accent transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Add Chapter
+                    </button>
+                  </div>
+
                   <div className="space-y-4">
-                    {editingBookNotes.journalEntries && editingBookNotes.journalEntries.length > 0 ? (
-                      editingBookNotes.journalEntries.map((entry) => (
-                        <div key={entry.id} className="bg-surface p-4 rounded-2xl border border-border group/entry">
-                          <div className="flex justify-between items-start mb-2">
-                            <span className="text-[10px] font-mono text-text-muted">
-                              {format(parseISO(entry.date), "MMM d, yyyy • h:mm a")}
-                            </span>
+                    {currentBookDetail.chapters && currentBookDetail.chapters.length > 0 ? (
+                      currentBookDetail.chapters.map((chapter) => (
+                        <div key={chapter.id} className="bg-surface p-4 rounded-2xl border border-border space-y-3 group/chapter">
+                          <div className="flex justify-between items-center">
+                            <input 
+                              type="text"
+                              value={chapter.title}
+                              onChange={(e) => updateChapter(currentBookDetail.id, chapter.id, { title: e.target.value })}
+                              className="bg-transparent border-none p-0 text-sm font-bold text-white focus:ring-0 w-full"
+                              placeholder="Chapter Title"
+                            />
                             <button 
-                              onClick={() => deleteJournalEntry(editingBookNotes.id, entry.id)}
-                              className="opacity-0 group-hover/entry:opacity-100 p-1 text-text-muted hover:text-red-400 transition-all"
+                              onClick={() => deleteChapter(currentBookDetail.id, chapter.id)}
+                              className="opacity-0 group-hover/chapter:opacity-100 p-1 text-text-muted hover:text-red-400 transition-all"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
                           </div>
-                          <p className="text-sm text-white/90 leading-relaxed whitespace-pre-wrap">{entry.content}</p>
+                          <textarea 
+                            value={chapter.notes}
+                            onChange={(e) => updateChapter(currentBookDetail.id, chapter.id, { notes: e.target.value })}
+                            className="w-full bg-bg/50 border border-border rounded-xl p-3 text-sm text-white/80 focus:border-accent focus:ring-1 focus:ring-accent transition-all min-h-[100px] resize-none"
+                            placeholder="Write your notes for this chapter..."
+                          />
                         </div>
                       ))
                     ) : (
-                      <div className="text-center py-8 border border-dashed border-border rounded-2xl">
-                        <MessageSquare className="w-8 h-8 text-border mx-auto mb-2" />
-                        <p className="text-xs text-text-muted">No journal entries yet.</p>
+                      <div className="text-center py-12 border border-dashed border-border rounded-3xl">
+                        <BookOpen className="w-12 h-12 text-border mx-auto mb-4" />
+                        <p className="text-sm text-text-muted">No chapters added yet.</p>
+                        <button 
+                          onClick={() => addChapter(currentBookDetail.id)}
+                          className="mt-4 text-[10px] uppercase tracking-widest text-accent font-bold hover:underline"
+                        >
+                          Add your first chapter
+                        </button>
                       </div>
                     )}
-                  </div>
-                </div>
-
-                {/* New Entry Form */}
-                <div className="space-y-4 pt-4 border-t border-border">
-                  <h4 className="text-[10px] uppercase tracking-[0.2em] text-accent font-bold">New Entry</h4>
-                  <div className="space-y-4">
-                    <textarea 
-                      id="new-journal-entry"
-                      className="input-field h-32 resize-none" 
-                      placeholder="What are your thoughts on the current chapters?..." 
-                    />
-                    <button 
-                      onClick={() => {
-                        const textarea = document.getElementById('new-journal-entry') as HTMLTextAreaElement;
-                        if (textarea) {
-                          saveBookNotes(editingBookNotes.id, textarea.value);
-                          textarea.value = "";
-                        }
-                      }}
-                      className="btn-primary w-full flex items-center justify-center gap-2"
-                    >
-                      <Save className="w-5 h-5" />
-                      Add to Journal
-                    </button>
                   </div>
                 </div>
               </div>

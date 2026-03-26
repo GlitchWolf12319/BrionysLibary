@@ -1,3 +1,9 @@
+export interface Chapter {
+  id: string;
+  title: string;
+  notes: string;
+}
+
 export interface JournalEntry {
   id: string;
   date: string; // ISO string
@@ -19,6 +25,7 @@ export interface Book {
   finishedDate?: string; // ISO string
   notes?: string; // Legacy field
   journalEntries?: JournalEntry[];
+  chapters?: Chapter[];
   uid: string;
 }
 
