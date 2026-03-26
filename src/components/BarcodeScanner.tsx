@@ -24,9 +24,12 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanEr
       }
 
       const config = {
-        fps: 10,
+        fps: 20, // Increased for smoother detection
         qrbox: { width: 280, height: 180 },
-        aspectRatio: 1.0, // Square aspect ratio is often better for mobile focus
+        aspectRatio: 1.0,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true // Uses native hardware if available (much faster)
+        },
         formatsToSupport: [
           Html5QrcodeSupportedFormats.EAN_13,
           Html5QrcodeSupportedFormats.EAN_8,
@@ -96,6 +99,14 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanEr
     <div className="w-full space-y-4">
       <div className="relative aspect-square w-full overflow-hidden rounded-3xl border border-border bg-surface shadow-inner">
         <div id={scannerId} className="w-full h-full"></div>
+        
+        {isScanning && (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="w-[280px] h-[180px] border-2 border-accent/50 rounded-lg animate-pulse flex items-center justify-center">
+              <div className="w-full h-[1px] bg-accent/30 animate-[scan_2s_linear_infinite]" />
+            </div>
+          </div>
+        )}
         
         {!isScanning && !isLoading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center space-y-4 bg-bg/40 backdrop-blur-sm">
