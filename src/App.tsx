@@ -51,6 +51,52 @@ import { collection, doc, setDoc, deleteDoc, onSnapshot, query, where, updateDoc
 
 type Tab = "collections" | "calendar" | "wishlist" | "dragons";
 
+const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: string, currentPage: number, totalPages: number, onUpdate: (id: string, page: number) => void }) => {
+  const [localValue, setLocalValue] = useState(currentPage.toString());
+
+  useEffect(() => {
+    setLocalValue(currentPage.toString());
+  }, [currentPage]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalValue(e.target.value);
+  };
+
+  const handleBlur = () => {
+    const val = parseInt(localValue) || 0;
+    if (val !== currentPage) {
+      onUpdate(bookId, val);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const val = parseInt(localValue) || 0;
+      if (val !== currentPage) {
+        onUpdate(bookId, val);
+      }
+      e.currentTarget.blur();
+    }
+  };
+
+  return (
+    <div className="relative flex items-center group">
+      <input 
+        type="number"
+        min="0"
+        max={totalPages}
+        value={localValue}
+        onClick={(e) => e.stopPropagation()}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        className="w-12 md:w-16 bg-surface/50 border border-border rounded-md px-2 py-1 text-[10px] md:text-xs text-white focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none font-mono transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+      />
+      <span className="ml-1.5 text-[8px] md:text-[10px] text-text-muted font-medium">/ {totalPages}</span>
+    </div>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -798,18 +844,12 @@ export default function App() {
                                     
                                     <div className="space-y-2">
                                       <div className="flex justify-between items-center">
-                                        <div className="flex items-center gap-1">
-                                          <input 
-                                            type="number"
-                                            min="0"
-                                            max={book.totalPages}
-                                            value={book.currentPage}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) => updateProgress(book.id, parseInt(e.target.value) || 0)}
-                                            className="w-12 md:w-16 bg-bg border border-border rounded px-1 py-0.5 text-[10px] md:text-xs text-white focus:border-accent outline-none font-mono"
-                                          />
-                                          <span className="text-[8px] md:text-[10px] text-text-muted">/ {book.totalPages}</span>
-                                        </div>
+                                        <ProgressInput 
+                                          bookId={book.id}
+                                          currentPage={book.currentPage}
+                                          totalPages={book.totalPages}
+                                          onUpdate={updateProgress}
+                                        />
                                         <span className="text-[8px] md:text-[10px] text-accent font-bold">
                                           {Math.round((book.currentPage / book.totalPages) * 100) || 0}%
                                         </span>
@@ -1191,19 +1231,12 @@ export default function App() {
                           </span>
                         </div>
                       )}
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="number"
-                          min="0"
-                          max={currentBookDetail.totalPages}
-                          value={currentBookDetail.currentPage}
-                          onChange={(e) => updateProgress(currentBookDetail.id, parseInt(e.target.value) || 0)}
-                          className="w-16 bg-bg/50 border border-border rounded px-2 py-1 text-xs text-white focus:border-accent outline-none font-mono"
-                        />
-                        <span className="text-[10px] uppercase tracking-widest text-text-muted font-bold">
-                          / {currentBookDetail.totalPages} Pages
-                        </span>
-                      </div>
+                      <ProgressInput 
+                        bookId={currentBookDetail.id}
+                        currentPage={currentBookDetail.currentPage}
+                        totalPages={currentBookDetail.totalPages}
+                        onUpdate={updateProgress}
+                      />
                     </div>
                   </div>
                   <button onClick={() => setSelectedBookForDetail(null)} className="absolute top-6 right-6 p-2 bg-bg/20 backdrop-blur-md rounded-full text-white hover:bg-bg/40 transition-all">
