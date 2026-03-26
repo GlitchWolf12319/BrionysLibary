@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: books
+    // Fields:
+    //   - id: string (required)
+    //   - title: string (required)
+    //   - author: string (required)
+    //   - coverUrl: string
+    //   - currentPage: number
+    //   - totalPages: number
+    //   - priority: number
+    //   - seriesId: string
+    //   - isBought: bool
+    //   - isWishlist: bool
+    //   - finishedDate: string
+    //   - uid: string (required, owner)
+    //   - journalEntries: list of maps
+    //
+    // Collection: series
+    // Fields:
+    //   - id: string (required)
+    //   - title: string (required)
+    //   - description: string
+    //   - color: string
+    //   - uid: string (required, owner)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isValidBook(data) {
+      return data.id is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.author is string && data.author.size() > 0 && data.author.size() < 200 &&
+             data.uid == request.auth.uid &&
+             (!('currentPage' in data) || data.currentPage is number) &&
+             (!('totalPages' in data) || data.totalPages is number) &&
+             (!('seriesId' in data) || data.seriesId is string) &&
+             (!('journalEntries' in data) || data.journalEntries is list);
+    }
+
+    function isValidSeries(data) {
+      return data.id is string &&
+             data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.uid == request.auth.uid &&
+             (!('color' in data) || (data.color is string && data.color.matches("^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$")));
+    }
+
+    match /books/{bookId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidBook(request.resource.data);
+      allow update: if isAuthenticated() && isOwner(resource.data.uid) && isValidBook(request.resource.data);
+      allow delete: if isAuthenticated() && isOwner(resource.data.uid);
+    }
+
+    match /series/{seriesId} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow create: if isAuthenticated() && isValidSeries(request.resource.data);
+      allow update: if isAuthenticated() && isOwner(resource.data.uid) && isValidSeries(request.resource.data);
+      allow delete: if isAuthenticated() && isOwner(resource.data.uid);
+    }
+  }
+}

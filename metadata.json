@@ -1,0 +1,5 @@
+{
+  "name": "Reading Collections",
+  "description": "An ethereal, high-fantasy editorial library for tracking Briony's reading journey through starlight and ancient scrolls.",
+  "requestFramePermissions": ["camera"]
+}

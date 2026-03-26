@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "Book": {
+      "title": "Book",
+      "description": "A book in the user's library or wishlist",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "author": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "currentPage": { "type": "number" },
+        "totalPages": { "type": "number" },
+        "priority": { "type": "number" },
+        "seriesId": { "type": "string" },
+        "isBought": { "type": "boolean" },
+        "isWishlist": { "type": "boolean" },
+        "finishedDate": { "type": "string" },
+        "uid": { "type": "string" },
+        "journalEntries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "date": { "type": "string" },
+              "content": { "type": "string" }
+            }
+          }
+        }
+      },
+      "required": ["id", "title", "author", "uid"]
+    },
+    "Series": {
+      "title": "Series",
+      "description": "A collection or series of books",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "color": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "title", "uid"]
+    }
+  },
+  "firestore": {
+    "books": {
+      "schema": "Book",
+      "description": "User's books"
+    },
+    "series": {
+      "schema": "Series",
+      "description": "User's book collections"
+    }
+  }
+}
