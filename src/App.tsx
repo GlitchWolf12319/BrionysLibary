@@ -165,6 +165,7 @@ export default function App() {
         } else if (selectedBookForDetail) {
           try {
             await updateDoc(doc(db, "books", selectedBookForDetail.id), { coverUrl: base64 });
+            setSelectedBookForDetail(prev => prev ? { ...prev, coverUrl: base64 } : null);
           } catch (error) {
             handleFirestoreError(error, OperationType.UPDATE, "books");
           }
@@ -173,6 +174,7 @@ export default function App() {
         }
       };
       reader.readAsDataURL(file);
+      e.target.value = '';
     }
   };
 
@@ -209,7 +211,7 @@ export default function App() {
 
       const result = JSON.parse(response.text);
       if (result.isbn) {
-        await fetchBookByISBN(result.isbn, base64);
+        await fetchBookByISBN(result.isbn, base64, result.totalPages);
       } else {
         setNewBook(prev => ({
           ...prev,
@@ -306,7 +308,7 @@ export default function App() {
     return () => unsubscribe();
   }, [isAuthReady, user]);
 
-  const fetchBookByISBN = async (isbn: string, customCoverUrl?: string) => {
+  const fetchBookByISBN = async (isbn: string, customCoverUrl?: string, initialPages?: number) => {
     setIsFetchingBook(true);
     try {
       // Try Google Books API first with ISBN
@@ -315,7 +317,7 @@ export default function App() {
       
       let title = "";
       let author = "";
-      let totalPages = 0;
+      let totalPages = initialPages || 0;
       let coverUrl = customCoverUrl || "";
 
       if (data.items && data.items.length > 0) {
@@ -365,7 +367,9 @@ export default function App() {
           const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
           const geminiResponse = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
-            contents: `Find the total page count for the book: "${title}" by "${author}" (ISBN: ${isbn}). Search Amazon, Goodreads, and Google Books to find the exact page count for the most common paperback or hardcover edition.`,
+            contents: `Find the total page count for the book: "${title}" by "${author}" (ISBN: ${isbn}). 
+            Search Amazon, Goodreads, and Google Books to find the exact page count for the most common paperback or hardcover edition. 
+            Be very precise. If you find multiple editions, use the most common one.`,
             config: {
               tools: [{ googleSearch: {} }],
               responseMimeType: "application/json",
@@ -379,7 +383,7 @@ export default function App() {
             }
           });
           const geminiResult = JSON.parse(geminiResponse.text);
-          if (geminiResult.totalPages) {
+          if (geminiResult.totalPages && geminiResult.totalPages > 0) {
             totalPages = geminiResult.totalPages;
           }
         } catch (geminiError) {
@@ -1459,7 +1463,7 @@ export default function App() {
         {isSettingsModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSettingsModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md card p-8">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-serif font-bold">Settings</h3>
                 <button onClick={() => setIsSettingsModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
@@ -1489,7 +1493,7 @@ export default function App() {
         {isSelectSeriesModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSelectSeriesModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-serif font-bold">Select Collection</h3>
                 <button onClick={() => setIsSelectSeriesModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
