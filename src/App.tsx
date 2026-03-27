@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState, useEffect, FormEvent, useMemo, Component, ErrorInfo, ReactNode } from "react";
+import { useState, useEffect, FormEvent, useMemo, Component, ErrorInfo, ReactNode, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Plus, 
@@ -25,8 +25,14 @@ import {
   LogOut,
   LogIn,
   User as UserIcon,
-  Flame
+  Flame,
+  Check,
+  Upload,
+  Image as ImageIcon,
+  Camera,
+  AlertTriangle
 } from "lucide-react";
+import { GoogleGenAI, Type } from "@google/genai";
 import { 
   format, 
   addMonths, 
@@ -53,6 +59,7 @@ type Tab = "collections" | "calendar" | "wishlist" | "dragons";
 
 const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: string, currentPage: number, totalPages: number, onUpdate: (id: string, page: number) => void }) => {
   const [localValue, setLocalValue] = useState(currentPage.toString());
+  const [isEditing, setIsEditing] = useState(false);
 
   useEffect(() => {
     setLocalValue(currentPage.toString());
@@ -60,39 +67,60 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
+    setIsEditing(true);
   };
 
-  const handleBlur = () => {
+  const handleSave = () => {
     const val = parseInt(localValue) || 0;
     if (val !== currentPage) {
       onUpdate(bookId, val);
     }
+    setIsEditing(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      const val = parseInt(localValue) || 0;
-      if (val !== currentPage) {
-        onUpdate(bookId, val);
-      }
+      handleSave();
       e.currentTarget.blur();
     }
   };
 
+  const hasChanged = parseInt(localValue) !== currentPage;
+
   return (
-    <div className="relative flex items-center group">
-      <input 
-        type="number"
-        min="0"
-        max={totalPages}
-        value={localValue}
-        onClick={(e) => e.stopPropagation()}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        className="w-12 md:w-16 bg-surface/50 border border-border rounded-md px-2 py-1 text-[10px] md:text-xs text-white focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none font-mono transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-      />
-      <span className="ml-1.5 text-[8px] md:text-[10px] text-text-muted font-medium">/ {totalPages}</span>
+    <div className="relative flex items-center gap-2 group">
+      <div className="relative flex items-center">
+        <input 
+          type="number"
+          min="0"
+          max={totalPages}
+          value={localValue}
+          onClick={(e) => e.stopPropagation()}
+          onFocus={() => setIsEditing(true)}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          className="w-14 md:w-20 bg-surface/80 border border-border/50 rounded-lg px-2.5 py-1.5 text-[11px] md:text-sm text-white focus:border-accent focus:ring-2 focus:ring-accent/20 outline-none font-mono transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none shadow-inner"
+        />
+        <span className="ml-1.5 text-[8px] md:text-[10px] text-text-muted font-medium">/ {totalPages}</span>
+      </div>
+      
+      <AnimatePresence>
+        {hasChanged && (
+          <motion.button
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSave();
+            }}
+            className="p-1.5 bg-accent/20 text-accent rounded-md hover:bg-accent/30 transition-all"
+            title="Save Progress"
+          >
+            <Check className="w-3 h-3" />
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -105,9 +133,99 @@ export default function App() {
   
   const [activeTab, setActiveTab] = useState<Tab>("collections");
   const [isScanning, setIsScanning] = useState(false);
+  const [isIdentifyingMode, setIsIdentifyingMode] = useState(false);
   const [isFetchingBook, setIsFetchingBook] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
   const [authError, setAuthError] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedBookForDetail, setSelectedBookForDetail] = useState<Book | null>(null);
+  const [isAddChapterModalOpen, setIsAddChapterModalOpen] = useState(false);
+  const [newChapterData, setNewChapterData] = useState({ title: "", notes: "" });
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result as string;
+        if (isIdentifyingMode) {
+          setIsIdentifyingMode(false);
+          await identifyBookFromImage(base64);
+        } else if (selectedBookForDetail) {
+          try {
+            await updateDoc(doc(db, "books", selectedBookForDetail.id), { coverUrl: base64 });
+          } catch (error) {
+            handleFirestoreError(error, OperationType.UPDATE, "books");
+          }
+        } else {
+          setNewBook(prev => ({ ...prev, coverUrl: base64 }));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const identifyBookFromImage = async (base64: string) => {
+    setIsFetchingBook(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: base64.split(",")[1],
+            },
+          },
+          { text: "Identify the book in this image. Return the title, author, and ISBN if possible. You MUST find the total page count. Use Google Search to look up the book on Amazon, Goodreads, or Google Books to find the exact page count for the most common paperback or hardcover edition. Do not leave totalPages as 0 if at all possible." },
+        ],
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              author: { type: Type.STRING },
+              isbn: { type: Type.STRING },
+              totalPages: { type: Type.NUMBER },
+            },
+            required: ["title", "author"],
+          },
+        },
+      });
+
+      const result = JSON.parse(response.text);
+      if (result.isbn) {
+        await fetchBookByISBN(result.isbn, base64);
+      } else {
+        setNewBook(prev => ({
+          ...prev,
+          title: result.title || prev.title,
+          author: result.author || prev.author,
+          totalPages: result.totalPages || prev.totalPages,
+          coverUrl: base64,
+        }));
+      }
+    } catch (error) {
+      console.error("Identification Error:", error);
+      setFetchError("Failed to identify book. Please try again or enter details manually.");
+    } finally {
+      setIsFetchingBook(false);
+    }
+  };
 
   const currentBookDetail = books.find(b => b.id === selectedBookForDetail?.id);
 
@@ -161,7 +279,7 @@ export default function App() {
 
     const q = query(collection(db, "series"), where("uid", "==", user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as Series);
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Series));
       setSeriesList(data);
     }, (error) => {
       console.error("Firestore Error (series):", error);
@@ -179,7 +297,7 @@ export default function App() {
 
     const q = query(collection(db, "books"), where("uid", "==", user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => doc.data() as Book);
+      const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Book));
       setBooks(data);
     }, (error) => {
       console.error("Firestore Error (books):", error);
@@ -188,31 +306,44 @@ export default function App() {
     return () => unsubscribe();
   }, [isAuthReady, user]);
 
-  const fetchBookByISBN = async (isbn: string) => {
+  const fetchBookByISBN = async (isbn: string, customCoverUrl?: string) => {
     setIsFetchingBook(true);
     try {
-      // Try Google Books API first
-      const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
-      const data = await response.json();
+      // Try Google Books API first with ISBN
+      let response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+      let data = await response.json();
       
       let title = "";
       let author = "";
       let totalPages = 0;
-      let coverUrl = "";
-      let chapters: Chapter[] = [];
+      let coverUrl = customCoverUrl || "";
 
       if (data.items && data.items.length > 0) {
-        // Try to find an item with pageCount
         const itemWithPageCount = data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
         const bookInfo = itemWithPageCount.volumeInfo;
-        
         title = bookInfo.title || "";
         author = bookInfo.authors ? bookInfo.authors.join(", ") : "";
         totalPages = bookInfo.pageCount || 0;
-        coverUrl = bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : "";
+        if (!coverUrl) {
+          coverUrl = bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : "";
+        }
       }
 
-      // Try OpenLibrary for more details and chapters
+      // If no page count found, try a general search by title/author if we have them
+      if (totalPages === 0 && (title || author)) {
+        const searchResponse = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(title + " " + author)}&maxResults=5`);
+        const searchData = await searchResponse.json();
+        if (searchData.items) {
+          const itemWithPages = searchData.items.find((item: any) => item.volumeInfo.pageCount);
+          if (itemWithPages) {
+            totalPages = itemWithPages.volumeInfo.pageCount;
+            if (!title) title = itemWithPages.volumeInfo.title;
+            if (!author) author = itemWithPages.volumeInfo.authors?.join(", ");
+          }
+        }
+      }
+
+      // Try OpenLibrary for more details
       try {
         const olResponse = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
         const olData = await olResponse.json();
@@ -223,17 +354,37 @@ export default function App() {
           if (!author) author = olBook.authors ? olBook.authors.map((a: any) => a.name).join(", ") : "";
           if (totalPages === 0 && olBook.number_of_pages) totalPages = olBook.number_of_pages;
           if (!coverUrl && olBook.cover) coverUrl = olBook.cover.large || olBook.cover.medium || olBook.cover.small;
-          
-          if (olBook.table_of_contents) {
-            chapters = olBook.table_of_contents.map((item: any, index: number) => ({
-              id: `chapter-${index}-${Date.now()}`,
-              title: item.title || `Chapter ${index + 1}`,
-              notes: ""
-            }));
-          }
         }
       } catch (olError) {
         console.error("OpenLibrary fetch failed:", olError);
+      }
+
+      // Final fallback: Use Gemini with Google Search if page count is still 0
+      if (totalPages === 0 && (title || author || isbn)) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          const geminiResponse = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: `Find the total page count for the book: "${title}" by "${author}" (ISBN: ${isbn}). Search Amazon, Goodreads, and Google Books to find the exact page count for the most common paperback or hardcover edition.`,
+            config: {
+              tools: [{ googleSearch: {} }],
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  totalPages: { type: Type.NUMBER },
+                },
+                required: ["totalPages"],
+              },
+            }
+          });
+          const geminiResult = JSON.parse(geminiResponse.text);
+          if (geminiResult.totalPages) {
+            totalPages = geminiResult.totalPages;
+          }
+        } catch (geminiError) {
+          console.error("Gemini fallback search failed:", geminiError);
+        }
       }
 
       if (title || author || totalPages > 0) {
@@ -242,22 +393,22 @@ export default function App() {
           title: title || prev.title,
           author: author || prev.author,
           totalPages: totalPages || prev.totalPages,
-          coverUrl: coverUrl || prev.coverUrl || `https://picsum.photos/seed/${isbn}/400/600`,
-          chapters: chapters.length > 0 ? chapters : prev.chapters
+          coverUrl: coverUrl || prev.coverUrl || `https://picsum.photos/seed/${isbn}/400/600`
         }));
         setIsScanning(false);
       } else {
-        alert("Book not found. Please enter details manually.");
+        setFetchError("Book not found. Please enter details manually.");
       }
     } catch (error) {
       console.error("Error fetching book data:", error);
-      alert("Failed to fetch book data. Please check your connection.");
+      setFetchError("Failed to fetch book data. Please check your connection.");
     } finally {
       setIsFetchingBook(false);
     }
   };
   const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSelectSeriesModalOpen, setIsSelectSeriesModalOpen] = useState(false);
   const [bookToMove, setBookToMove] = useState<Book | null>(null);
   const [editingSeries, setEditingSeries] = useState<Series | null>(null);
@@ -270,7 +421,7 @@ export default function App() {
     e.preventDefault();
     if (!user) return;
 
-    const bookId = Math.random().toString(36).substr(2, 9);
+    const bookId = doc(collection(db, "books")).id;
     const book: Book = {
       id: bookId,
       ...newBook,
@@ -300,7 +451,7 @@ export default function App() {
         handleFirestoreError(error, OperationType.UPDATE, "series");
       }
     } else {
-      const seriesId = Math.random().toString(36).substr(2, 9);
+      const seriesId = doc(collection(db, "series")).id;
       const series: Series = {
         id: seriesId,
         ...newSeries,
@@ -318,18 +469,51 @@ export default function App() {
   };
 
   const deleteSeries = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this collection? Books will remain but lose their collection link.")) {
-      try {
-        await deleteDoc(doc(db, "series", id));
-        // Update books that were in this series
-        const batch = books.filter(b => b.seriesId === id);
-        for (const book of batch) {
-          await updateDoc(doc(db, "books", book.id), { seriesId: "" });
-        }
-      } catch (error) {
-        handleFirestoreError(error, OperationType.DELETE, "series");
+    try {
+      await deleteDoc(doc(db, "series", id));
+      // Update books that were in this series
+      const batch = books.filter(b => b.seriesId === id);
+      for (const book of batch) {
+        await updateDoc(doc(db, "books", book.id), { seriesId: "" });
       }
+      if (selectedSeriesId === id) {
+        setSelectedSeriesId(null);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, "series");
     }
+  };
+
+  const purgeAllData = async () => {
+    if (!user) return;
+    
+    setConfirmModal({
+      isOpen: true,
+      title: "PURGE ALL DATA",
+      message: "WARNING: This will permanently delete ALL your books, collections, and reading history. This action cannot be undone. Are you absolutely sure?",
+      onConfirm: async () => {
+        try {
+          // Delete all books
+          const bookPromises = books.map(book => deleteDoc(doc(db, "books", book.id)));
+          // Delete all series
+          const seriesPromises = seriesList.map(series => deleteDoc(doc(db, "series", series.id)));
+          
+          await Promise.all([...bookPromises, ...seriesPromises]);
+          
+          // Clear local state
+          setBooks([]);
+          setSeriesList([]);
+          setSelectedBookForDetail(null);
+          setSelectedSeriesId(null);
+          setIsSettingsModalOpen(false);
+          
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        } catch (error) {
+          console.error("Error purging data:", error);
+          alert("Failed to purge some data. Please try again.");
+        }
+      }
+    });
   };
 
   const deleteBook = async (id: string) => {
@@ -343,14 +527,14 @@ export default function App() {
     }
   };
 
-  const addChapter = async (bookId: string) => {
+  const addChapter = async (bookId: string, title: string, notes: string) => {
     const book = books.find(b => b.id === bookId);
     if (!book) return;
 
     const newChapter: Chapter = {
       id: `chapter-${Date.now()}`,
-      title: `Chapter ${(book.chapters?.length || 0) + 1}`,
-      notes: ""
+      title: title || `Chapter ${(book.chapters?.length || 0) + 1}`,
+      notes: notes || ""
     };
 
     const updatedChapters = [...(book.chapters || []), newChapter];
@@ -359,6 +543,15 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "books");
     }
+  };
+
+  const handleAddChapter = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!selectedBookForDetail) return;
+    
+    await addChapter(selectedBookForDetail.id, newChapterData.title, newChapterData.notes);
+    setIsAddChapterModalOpen(false);
+    setNewChapterData({ title: "", notes: "" });
   };
 
   const updateChapter = async (bookId: string, chapterId: string, updates: Partial<Chapter>) => {
@@ -441,7 +634,7 @@ export default function App() {
     if (!b) return;
 
     const newEntry = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: crypto.randomUUID(),
       date: new Date().toISOString(),
       content: content.trim()
     };
@@ -545,7 +738,8 @@ export default function App() {
               {day}
             </div>
           ))}
-          {calendarDays.map((day, idx) => {
+          {calendarDays.map((day) => {
+            const dayKey = day.toISOString();
             const booksWithActivityOnDay = books.filter(b => {
               const isFinishedToday = b.finishedDate && isSameDay(parseISO(b.finishedDate), day);
               const hasEntryToday = b.journalEntries?.some(e => isSameDay(parseISO(e.date), day));
@@ -557,7 +751,7 @@ export default function App() {
 
             return (
               <div 
-                key={idx} 
+                key={dayKey} 
                 className={`min-h-[60px] sm:min-h-[100px] md:min-h-[140px] p-1 md:p-2 transition-colors relative ${isCurrentMonth ? 'bg-surface' : 'bg-bg/40 opacity-30'}`}
               >
                 <span className={`text-[10px] md:text-xs font-mono ${isToday ? 'text-accent font-bold' : 'text-text-muted'}`}>
@@ -572,7 +766,7 @@ export default function App() {
 
                     return (
                       <motion.div
-                        key={book.id}
+                        key={`${book.id}-${dayKey}`}
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         onClick={() => setSelectedBookForDetail(book)}
@@ -643,6 +837,9 @@ export default function App() {
                     <span className="text-[10px] font-bold text-white uppercase tracking-widest">{user.displayName}</span>
                     <button onClick={logOut} className="text-[8px] text-text-muted hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1">
                       <LogOut className="w-3 h-3" /> Sign Out
+                    </button>
+                    <button onClick={() => setIsSettingsModalOpen(true)} className="text-[8px] text-text-muted hover:text-accent uppercase tracking-widest font-bold flex items-center gap-1 mt-1">
+                      <Settings2 className="w-3 h-3" /> Settings
                     </button>
                   </div>
                   {user.photoURL ? (
@@ -746,7 +943,7 @@ export default function App() {
                           {seriesBooks.length} Books • {currentPages} / {totalPages} Pages Read
                         </p>
                       </div>
-                      <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <button 
                           onClick={() => {
                             setEditingSeries(series);
@@ -780,7 +977,7 @@ export default function App() {
                         <div className="flex -space-x-3">
                           {seriesBooks.slice(0, 5).map((book, idx) => (
                             <motion.div
-                              key={book.id}
+                              key={`${book.id}-pill-${idx}`}
                               initial={{ x: -20, opacity: 0 }}
                               animate={{ x: 0, opacity: 1 }}
                               transition={{ delay: idx * 0.1 }}
@@ -824,7 +1021,7 @@ export default function App() {
                               const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
                               return (
                                 <motion.div 
-                                  key={book.id} 
+                                  key={`${book.id}-grid`} 
                                   layoutId={book.id}
                                   onClick={() => setSelectedBookForDetail(book)}
                                   className="card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all"
@@ -942,7 +1139,7 @@ export default function App() {
             >
               {wishlistBooks.map(book => (
                 <motion.div 
-                  key={book.id} 
+                  key={`${book.id}-wishlist`} 
                   layoutId={book.id}
                   onClick={() => setSelectedBookForDetail(book)}
                   className="card p-3 flex flex-col gap-3 group/wish relative cursor-pointer hover:border-accent transition-all"
@@ -979,7 +1176,7 @@ export default function App() {
             >
               {dragonBooks.map(book => (
                 <motion.div 
-                  key={book.id} 
+                  key={`${book.id}-dragon`} 
                   layoutId={book.id}
                   onClick={() => setSelectedBookForDetail(book)}
                   className="card p-3 flex flex-col gap-3 group/dragon relative cursor-pointer hover:border-accent transition-all"
@@ -1044,13 +1241,61 @@ export default function App() {
 
       {/* Modals */}
       <AnimatePresence>
+        {confirmModal.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} 
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }} 
+              animate={{ opacity: 1, y: 0 }} 
+              exit={{ opacity: 0, y: 20 }} 
+              className="relative w-full max-w-[320px] bg-surface border border-white/10 rounded-[32px] p-8 text-center shadow-2xl"
+            >
+              <div className="w-14 h-14 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6 rotate-3">
+                <Trash2 className="w-7 h-7" />
+              </div>
+              <h3 className="text-xl font-serif font-bold mb-2 text-white">{confirmModal.title}</h3>
+              <p className="text-text-muted text-sm mb-8 leading-relaxed">{confirmModal.message}</p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={confirmModal.onConfirm}
+                  className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-500/20 active:scale-95"
+                >
+                  Delete
+                </button>
+                <button 
+                  onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                  className="w-full py-4 text-text-muted hover:text-white font-bold transition-colors text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
         {isAddBookModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAddBookModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-serif font-bold">Add {newBook.isWishlist ? "to Wishlist" : "New Book"}</h3>
                 <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      setIsIdentifyingMode(true);
+                      fileInputRef.current?.click();
+                    }}
+                    className="p-2 text-accent hover:bg-accent/10 rounded-full transition-colors"
+                    title="Identify from Image"
+                  >
+                    <Camera className="w-5 h-5" />
+                  </button>
                   <button 
                     onClick={() => setIsScanning(true)}
                     className="p-2 text-accent hover:bg-accent/10 rounded-full transition-colors"
@@ -1062,6 +1307,14 @@ export default function App() {
                 </div>
               </div>
               <form onSubmit={handleAddBook} className="space-y-6">
+                {fetchError && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-[10px] font-bold uppercase tracking-widest flex justify-between items-center">
+                    <span>{fetchError}</span>
+                    <button onClick={() => setFetchError(null)} className="p-1 hover:bg-red-500/20 rounded-full transition-colors">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
                 {isFetchingBook && (
                   <div className="flex items-center justify-center gap-2 text-accent py-2 bg-accent/5 rounded-xl border border-accent/20">
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -1084,8 +1337,23 @@ export default function App() {
                   <input required value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} className="input-field" placeholder="e.g. J.R.R. Tolkien" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Cover URL (Optional)</label>
-                  <input value={newBook.coverUrl} onChange={e => setNewBook({...newBook, coverUrl: e.target.value})} className="input-field" placeholder="https://example.com/cover.jpg" />
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Cover Image</label>
+                  <div className="flex gap-2">
+                    <input 
+                      value={newBook.coverUrl} 
+                      onChange={e => setNewBook({...newBook, coverUrl: e.target.value})} 
+                      className="input-field flex-1" 
+                      placeholder="Paste URL or upload image..." 
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="p-3 bg-surface border border-border rounded-xl text-text-muted hover:text-accent hover:border-accent transition-all flex-shrink-0"
+                      title="Upload from Gallery"
+                    >
+                      <ImageIcon className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 {!newBook.isWishlist && (
                   <div className="space-y-2">
@@ -1115,7 +1383,7 @@ export default function App() {
         {isSeriesModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSeriesModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-serif font-bold">{editingSeries ? "Edit Collection" : "New Collection"}</h3>
                 <button onClick={() => setIsSeriesModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
@@ -1149,6 +1417,71 @@ export default function App() {
                 </div>
                 <button type="submit" className="btn-primary w-full mt-4">{editingSeries ? "Save Changes" : "Create Collection"}</button>
               </form>
+            </motion.div>
+          </div>
+        )}
+
+        {isAddChapterModalOpen && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAddChapterModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-serif font-bold">Add Chapter</h3>
+                <button onClick={() => setIsAddChapterModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+              </div>
+              <form onSubmit={handleAddChapter} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Chapter Title</label>
+                  <input 
+                    required 
+                    value={newChapterData.title} 
+                    onChange={e => setNewChapterData({...newChapterData, title: e.target.value})} 
+                    className="input-field" 
+                    placeholder={`e.g. Chapter ${(currentBookDetail?.chapters?.length || 0) + 1}`} 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Notes</label>
+                  <textarea 
+                    value={newChapterData.notes} 
+                    onChange={e => setNewChapterData({...newChapterData, notes: e.target.value})} 
+                    className="input-field h-32 resize-none" 
+                    placeholder="What happened in this chapter?" 
+                  />
+                </div>
+                <button type="submit" className="btn-primary w-full mt-4 flex items-center justify-center gap-2">
+                  <Save className="w-4 h-4" /> Save Chapter
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+        {isSettingsModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSettingsModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md card p-8">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-serif font-bold">Settings</h3>
+                <button onClick={() => setIsSettingsModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+              </div>
+              
+              <div className="space-y-6">
+                <div className="p-6 rounded-2xl bg-red-500/5 border border-red-500/20 space-y-4">
+                  <div className="flex items-center gap-3 text-red-400">
+                    <AlertTriangle className="w-5 h-5" />
+                    <h4 className="font-bold uppercase tracking-widest text-xs">Danger Zone</h4>
+                  </div>
+                  <p className="text-xs text-text-muted leading-relaxed">
+                    Purging your data will permanently remove all your books, collections, and reading history from our servers. This action is irreversible.
+                  </p>
+                  <button 
+                    onClick={purgeAllData}
+                    className="w-full py-4 rounded-xl bg-red-500 text-white font-bold text-xs uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                  >
+                    Purge All Data
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </div>
         )}
@@ -1213,9 +1546,21 @@ export default function App() {
                 <img src={currentBookDetail.coverUrl} className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110" referrerPolicy="no-referrer" />
                 <div className="absolute inset-0 bg-gradient-to-t from-surface to-transparent" />
                 <div className="absolute inset-0 p-6 flex items-end gap-6">
-                  <div className="w-24 h-36 md:w-32 md:h-48 rounded-xl overflow-hidden border border-border shadow-2xl flex-shrink-0">
-                    <img src={currentBookDetail.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </div>
+                    <div className="w-24 h-36 md:w-32 md:h-48 rounded-xl overflow-hidden border border-border shadow-2xl flex-shrink-0 relative group cursor-pointer">
+                      <img src={currentBookDetail.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          fileInputRef.current?.click();
+                        }}
+                        className="absolute inset-0 bg-black/40 md:bg-black/60 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 md:gap-2 text-white"
+                      >
+                        <div className="p-2 bg-white/20 rounded-full backdrop-blur-sm">
+                          <Upload className="w-4 h-4 md:w-6 md:h-6" />
+                        </div>
+                        <span className="text-[7px] md:text-[8px] uppercase tracking-widest font-black drop-shadow-md">Change Cover</span>
+                      </button>
+                    </div>
                   <div className="flex-1 min-w-0 pb-2">
                     <h3 className="text-2xl md:text-4xl font-serif font-bold text-white truncate">{currentBookDetail.title}</h3>
                     <p className="text-sm md:text-xl text-text-muted italic truncate">{currentBookDetail.author}</p>
@@ -1249,11 +1594,7 @@ export default function App() {
               <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
                 <div className="flex gap-4">
                   <button 
-                    onClick={() => {
-                      if (window.confirm("Are you sure you want to delete this book?")) {
-                        deleteBook(currentBookDetail.id);
-                      }
-                    }}
+                    onClick={() => deleteBook(currentBookDetail.id)}
                     className="flex-1 py-4 rounded-2xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2"
                   >
                     <Trash2 className="w-4 h-4" /> Delete Book
@@ -1276,7 +1617,7 @@ export default function App() {
                   <div className="flex items-center justify-between">
                     <h4 className="text-xs uppercase tracking-[0.2em] text-accent font-bold">Chapters & Notes</h4>
                     <button 
-                      onClick={() => addChapter(currentBookDetail.id)}
+                      onClick={() => setIsAddChapterModalOpen(true)}
                       className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-text-muted hover:text-accent transition-colors"
                     >
                       <Plus className="w-3 h-3" /> Add Chapter
@@ -1285,8 +1626,8 @@ export default function App() {
 
                   <div className="space-y-4">
                     {currentBookDetail.chapters && currentBookDetail.chapters.length > 0 ? (
-                      currentBookDetail.chapters.map((chapter) => (
-                        <div key={chapter.id} className="bg-surface p-4 rounded-2xl border border-border space-y-3 group/chapter">
+                      currentBookDetail.chapters.map((chapter, idx) => (
+                        <div key={`${chapter.id}-${idx}`} className="bg-surface p-4 rounded-2xl border border-border space-y-3 group/chapter">
                           <div className="flex justify-between items-center">
                             <input 
                               type="text"
@@ -1297,7 +1638,7 @@ export default function App() {
                             />
                             <button 
                               onClick={() => deleteChapter(currentBookDetail.id, chapter.id)}
-                              className="opacity-0 group-hover/chapter:opacity-100 p-1 text-text-muted hover:text-red-400 transition-all"
+                              className="md:opacity-0 md:group-hover/chapter:opacity-100 p-1 text-text-muted hover:text-red-400 transition-all"
                             >
                               <Trash2 className="w-3 h-3" />
                             </button>
@@ -1315,7 +1656,7 @@ export default function App() {
                         <BookOpen className="w-12 h-12 text-border mx-auto mb-4" />
                         <p className="text-sm text-text-muted">No chapters added yet.</p>
                         <button 
-                          onClick={() => addChapter(currentBookDetail.id)}
+                          onClick={() => setIsAddChapterModalOpen(true)}
                           className="mt-4 text-[10px] uppercase tracking-widest text-accent font-bold hover:underline"
                         >
                           Add your first chapter
@@ -1361,6 +1702,13 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept="image/*" 
+        className="hidden" 
+      />
     </div>
   );
 }
