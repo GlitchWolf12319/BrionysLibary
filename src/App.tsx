@@ -350,12 +350,11 @@ export default function App() {
                       data: base64.split(",")[1],
                     },
                   },
-                  { text: "Identify the book in this image. Return the title, author, and ISBN if possible. You MUST find the total page count. Use Google Search to look up the book on Amazon, Goodreads, or Google Books to find the exact page count for the most common paperback or hardcover edition. Do not leave totalPages as 0 if at all possible." },
+                  { text: "Identify the book in this image. Return the title, author, and ISBN if possible. Also provide the total page count if you know it for the most common edition." },
                 ],
               },
             ],
             config: {
-              tools: [{ googleSearch: {} }],
               responseMimeType: "application/json",
               responseSchema: {
                 type: Type.OBJECT,
@@ -390,7 +389,7 @@ export default function App() {
           if (errorMessage.includes("API_KEY_INVALID") || errorMessage.includes("403")) {
             setFetchError("Invalid API Key. Please check your settings.");
           } else if (errorMessage.includes("quota")) {
-            setFetchError("API Quota exceeded. Please try again later or use a different key.");
+            setFetchError("API Quota exceeded. You've reached the limit for this API key. Please wait a bit, or create your own free key at aistudio.google.com and add it to Settings.");
           } else {
             setFetchError(`AI identification failed: ${errorMessage || "Unknown error"}. Please try again or enter details manually.`);
           }
@@ -510,7 +509,7 @@ export default function App() {
         const bookInfo = itemWithPageCount.volumeInfo;
         title = bookInfo.title || "";
         author = bookInfo.authors ? bookInfo.authors.join(", ") : "";
-        totalPages = bookInfo.pageCount || 0;
+        totalPages = bookInfo.pageCount || initialPages || 0;
         if (!coverUrl) {
           coverUrl = bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : "";
         }
