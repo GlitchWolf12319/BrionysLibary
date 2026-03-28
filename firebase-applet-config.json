@@ -1,9 +1,9 @@
 {
-  "apiKey": "AIzaSyApOyXipY-sYcbqO00YTGsVxGmlMC6J9So",
-  "authDomain": "brionyslibary.firebaseapp.com",
-  "projectId": "brionyslibary",
-  "storageBucket": "brionyslibary.firebasestorage.app",
-  "messagingSenderId": "193053494515",
-  "appId": "1:193053494515:web:bce1572601b507a24ebb86",
-  "measurementId": "G-XD8M5W765V"
+  "apiKey": "REPLACE_WITH_VITE_FIREBASE_API_KEY",
+  "authDomain": "REPLACE_WITH_VITE_FIREBASE_AUTH_DOMAIN",
+  "projectId": "REPLACE_WITH_VITE_FIREBASE_PROJECT_ID",
+  "storageBucket": "REPLACE_WITH_VITE_FIREBASE_STORAGE_BUCKET",
+  "messagingSenderId": "REPLACE_WITH_VITE_FIREBASE_MESSAGING_SENDER_ID",
+  "appId": "REPLACE_WITH_VITE_FIREBASE_APP_ID",
+  "measurementId": "REPLACE_WITH_VITE_FIREBASE_MEASUREMENT_ID"
 }
