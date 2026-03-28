@@ -568,11 +568,18 @@ export default function App() {
     try {
       await signInWithGoogle();
     } catch (error: any) {
+      console.error("Login Error:", error);
       if (error.code === 'auth/unauthorized-domain') {
-        setAuthError(`This domain is not authorized in Firebase. Please add the following domains to your Firebase Console (Authentication > Settings > Authorized domains):\n\n${window.location.hostname}`);
+        setAuthError(`This domain (${window.location.hostname}) is not authorized in your Firebase project. \n\nTo fix this:\n1. Go to the Firebase Console\n2. Navigate to Authentication > Settings > Authorized domains\n3. Add "${window.location.hostname}" to the list.`);
+      } else if (error.code === 'auth/account-exists-with-different-credential') {
+        setAuthError("An account already exists with the same email address but different sign-in credentials. Please try signing in with the provider you used originally.");
+      } else if (error.code === 'auth/popup-blocked') {
+        setAuthError("The sign-in popup was blocked by your browser. Please allow popups for this site and try again.");
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        // User closed the popup, no need for a loud error message
+        setAuthError(null);
       } else {
-        console.error("Login Error:", error);
-        setAuthError("Failed to sign in. Please try again.");
+        setAuthError(`Sign-in failed: ${error.message || "Unknown error"}. Please check your Firebase configuration and console for details.`);
       }
     }
   };
