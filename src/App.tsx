@@ -343,12 +343,16 @@ export default function App() {
             model: "gemini-3-flash-preview",
             contents: [
               {
-                inlineData: {
-                  mimeType: "image/jpeg",
-                  data: base64.split(",")[1],
-                },
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: "image/jpeg",
+                      data: base64.split(",")[1],
+                    },
+                  },
+                  { text: "Identify the book in this image. Return the title, author, and ISBN if possible. You MUST find the total page count. Use Google Search to look up the book on Amazon, Goodreads, or Google Books to find the exact page count for the most common paperback or hardcover edition. Do not leave totalPages as 0 if at all possible." },
+                ],
               },
-              { text: "Identify the book in this image. Return the title, author, and ISBN if possible. You MUST find the total page count. Use Google Search to look up the book on Amazon, Goodreads, or Google Books to find the exact page count for the most common paperback or hardcover edition. Do not leave totalPages as 0 if at all possible." },
             ],
             config: {
               tools: [{ googleSearch: {} }],
@@ -380,9 +384,16 @@ export default function App() {
               }));
             }
           }
-        } catch (geminiError) {
+        } catch (geminiError: any) {
           console.error("Gemini image identification failed:", geminiError);
-          setFetchError("AI identification failed. Please ensure your API key is correct or enter details manually.");
+          const errorMessage = geminiError.message || "";
+          if (errorMessage.includes("API_KEY_INVALID") || errorMessage.includes("403")) {
+            setFetchError("Invalid API Key. Please check your settings.");
+          } else if (errorMessage.includes("quota")) {
+            setFetchError("API Quota exceeded. Please try again later or use a different key.");
+          } else {
+            setFetchError(`AI identification failed: ${errorMessage || "Unknown error"}. Please try again or enter details manually.`);
+          }
         }
       } else {
         setFetchError("Gemini API key is missing. Please add it in Settings to use the image scanner.");
