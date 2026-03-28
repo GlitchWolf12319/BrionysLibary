@@ -5,7 +5,7 @@ import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
-  const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+  const apiKey = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY || 'AIzaSyA1_mb-WOIh1aG05TeYAii5-VXrH4d4Yx4';
   return {
     base: '/BrionysLibary/',
     plugins: [react(), tailwindcss()],

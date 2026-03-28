@@ -179,9 +179,13 @@ export default function App() {
     }
   };
 
+  const getGeminiKey = () => {
+    return userGeminiKey || process.env.GEMINI_API_KEY;
+  };
+
   const searchBookByTitle = async (title: string, author: string = "", ocrText: string = "") => {
     if (!title.trim()) return null;
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = getGeminiKey();
     setIsFetchingBook(true);
     setFetchError(null);
     try {
@@ -193,8 +197,19 @@ export default function App() {
       let bookData = null;
 
       if (data.items && data.items.length > 0) {
-        // Find the best result (one with a page count if possible)
-        foundBook = data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
+        // Find the best result (one with a page count AND matching OCR text if possible)
+        if (ocrText) {
+          const ocrLower = ocrText.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const bestMatch = data.items.find((item: any) => {
+            const info = item.volumeInfo;
+            const titleMatch = info.title?.toLowerCase().split(/\s+/).some((w: string) => w.length > 3 && ocrLower.includes(w.replace(/[^a-z0-9]/g, '')));
+            const authorMatch = info.authors?.some((a: string) => a.toLowerCase().split(/\s+/).some((w: string) => w.length > 3 && ocrLower.includes(w.replace(/[^a-z0-9]/g, ''))));
+            return info.pageCount && (titleMatch || authorMatch);
+          });
+          foundBook = bestMatch || data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
+        } else {
+          foundBook = data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
+        }
       }
 
       // If Google Books didn't have a page count, or no results, try OpenLibrary
@@ -346,7 +361,7 @@ export default function App() {
     setIsFetchingBook(true);
     setFetchError(null);
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = getGeminiKey();
       let identified = false;
 
       // Strategy 1: Use Gemini on the image directly (if key available)
@@ -539,6 +554,7 @@ export default function App() {
   const [newBook, setNewBook] = useState({
     title: "",
     author: "",
+    isbn: "",
     totalPages: 0,
     seriesId: "",
     isBought: true,
@@ -676,7 +692,7 @@ export default function App() {
       // Final fallback: Use Gemini with Google Search if page count is still 0
       if (totalPages === 0 && (title || author || isbn)) {
         try {
-          const apiKey = process.env.GEMINI_API_KEY;
+          const apiKey = getGeminiKey();
           if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
             throw new Error("Gemini API key is missing.");
           }
@@ -729,6 +745,7 @@ export default function App() {
   const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [userGeminiKey, setUserGeminiKey] = useState(localStorage.getItem('user_gemini_key') || "");
   const [isSelectSeriesModalOpen, setIsSelectSeriesModalOpen] = useState(false);
   const [bookToMove, setBookToMove] = useState<Book | null>(null);
   const [editingSeries, setEditingSeries] = useState<Series | null>(null);
@@ -1657,6 +1674,29 @@ export default function App() {
                   </div>
                 )}
                 <div className="space-y-2">
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">ISBN (Optional)</label>
+                  <div className="flex gap-2">
+                    <input 
+                      value={newBook.isbn || ""} 
+                      onChange={e => setNewBook({...newBook, isbn: e.target.value})} 
+                      className="input-field flex-1" 
+                      placeholder="e.g. 9780007136599" 
+                    />
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        if (newBook.isbn) {
+                          await fetchBookByISBN(newBook.isbn);
+                        }
+                      }}
+                      className="p-3 bg-surface border border-border rounded-xl text-text-muted hover:text-accent hover:border-accent transition-all flex-shrink-0"
+                      title="Fetch by ISBN"
+                    >
+                      <Barcode className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
                   <div className="flex gap-2">
                     <input required value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} className="input-field flex-1" placeholder="e.g. The Fellowship of the Ring" />
@@ -1809,6 +1849,38 @@ export default function App() {
               </div>
               
               <div className="space-y-6">
+                <div className="p-6 rounded-2xl bg-surface border border-border space-y-4">
+                  <div className="flex items-center gap-3 text-accent">
+                    <Settings2 className="w-5 h-5" />
+                    <h4 className="font-bold uppercase tracking-widest text-xs">AI Features</h4>
+                  </div>
+                  <p className="text-[10px] text-text-muted leading-relaxed">
+                    To use the advanced book scanner on your own domain (like GitHub Pages), you can provide your own Gemini API key. This key is stored only in your browser's local storage.
+                  </p>
+                  <div className="space-y-2">
+                    <label className="text-[8px] uppercase tracking-[0.2em] text-text-muted font-bold">Gemini API Key</label>
+                    <input 
+                      type="password"
+                      value={userGeminiKey}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setUserGeminiKey(val);
+                        localStorage.setItem('user_gemini_key', val);
+                      }}
+                      className="input-field"
+                      placeholder="Enter your API key..."
+                    />
+                    <a 
+                      href="https://aistudio.google.com/app/apikey" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-[8px] text-accent hover:underline block text-right"
+                    >
+                      Get a free key here →
+                    </a>
+                  </div>
+                </div>
+
                 <div className="p-6 rounded-2xl bg-red-500/5 border border-red-500/20 space-y-4">
                   <div className="flex items-center gap-3 text-red-400">
                     <AlertTriangle className="w-5 h-5" />
