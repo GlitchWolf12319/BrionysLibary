@@ -2,15 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, collection, doc, setDoc, getDoc, onSnapshot, query, where, deleteDoc, updateDoc, getDocFromServer } from "firebase/firestore";
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
-};
+import firebaseConfig from "../firebase-applet-config.json";
 
 // Check if config is valid
 const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith('REPLACE_WITH');
@@ -21,7 +13,7 @@ try {
   if (isConfigValid) {
     app = initializeApp(firebaseConfig);
   } else {
-    console.warn("Firebase configuration is missing or invalid. Please check your environment variables.");
+    console.warn("Firebase configuration is missing or invalid. Please check your firebase-applet-config.json file.");
     // Initialize with dummy app to prevent crashes, but it won't work
     app = initializeApp({
       apiKey: "dummy-key",

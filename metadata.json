@@ -1,5 +1,5 @@
 {
   "name": "Reading Collections",
-  "description": "An ethereal, high-fantasy editorial library for tracking Briony's reading journey through starlight and ancient scrolls.",
+  "description": "A local-first ethereal library for tracking your reading journey through starlight and ancient scrolls. Syncs with Firebase when signed in.",
   "requestFramePermissions": ["camera"]
 }
