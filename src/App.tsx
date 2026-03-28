@@ -1,5 +1,4 @@
-import * as React from "react";
-import { useState, useEffect, FormEvent, useMemo, Component, ErrorInfo, ReactNode, useRef } from "react";
+import React, { useState, useEffect, FormEvent, useMemo, Component, ErrorInfo, ReactNode, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Plus, 
@@ -125,7 +124,73 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
   );
 };
 
+interface ErrorBoundaryProps {
+  children: ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+  props: ErrorBoundaryProps;
+
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.props = props;
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-bg flex items-center justify-center p-6 text-center">
+          <div className="max-w-md w-full card p-8 space-y-6">
+            <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto rotate-3">
+              <AlertTriangle className="w-8 h-8" />
+            </div>
+            <h1 className="text-2xl font-serif font-bold text-white">Something went wrong</h1>
+            <p className="text-text-muted text-sm leading-relaxed">
+              The application encountered an unexpected error. This might be due to missing configuration or a temporary issue.
+            </p>
+            <div className="p-4 bg-black/20 rounded-xl text-left overflow-auto max-h-40">
+              <code className="text-xs text-red-400 break-all">
+                {this.state.error?.message || "Unknown error"}
+              </code>
+            </div>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full py-4 bg-accent text-bg font-bold rounded-xl hover:opacity-90 transition-all"
+            >
+              Reload Application
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [books, setBooks] = useState<Book[]>([]);
@@ -179,6 +244,10 @@ export default function App() {
   };
 
   const identifyBookFromImage = async (base64: string) => {
+    if (!process.env.GEMINI_API_KEY) {
+      setFetchError("Gemini API Key is missing. Please configure it in your environment variables.");
+      return;
+    }
     setIsFetchingBook(true);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -364,6 +433,10 @@ export default function App() {
       // Final fallback: Use Gemini with Google Search if page count is still 0
       if (totalPages === 0 && (title || author || isbn)) {
         try {
+          if (!process.env.GEMINI_API_KEY) {
+            console.warn("Gemini API Key is missing, skipping fallback search.");
+            return;
+          }
           const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
           const geminiResponse = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
