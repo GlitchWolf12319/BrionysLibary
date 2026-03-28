@@ -33,6 +33,7 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { GoogleGenAI, Type } from "@google/genai";
+import { createWorker } from "tesseract.js";
 import { 
   format, 
   addMonths, 
@@ -178,61 +179,356 @@ export default function App() {
     }
   };
 
+  const searchBookByTitle = async (title: string, author: string = "", ocrText: string = "") => {
+    if (!title.trim()) return null;
+    const apiKey = process.env.GEMINI_API_KEY;
+    setIsFetchingBook(true);
+    setFetchError(null);
+    try {
+      const query = encodeURIComponent(`${title} ${author}`);
+      const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=10`);
+      const data = await response.json();
+      
+      let foundBook = null;
+      let bookData = null;
+
+      if (data.items && data.items.length > 0) {
+        // Find the best result (one with a page count if possible)
+        foundBook = data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
+      }
+
+      // If Google Books didn't have a page count, or no results, try OpenLibrary
+      if (!foundBook || !foundBook.volumeInfo.pageCount) {
+        try {
+          const olResponse = await fetch(`https://openlibrary.org/search.json?q=${query}&limit=5`);
+          const olData = await olResponse.json();
+          if (olData.docs && olData.docs.length > 0) {
+            const bestOl = olData.docs.find((doc: any) => doc.number_of_pages_median || doc.number_of_pages) || olData.docs[0];
+            
+            if (foundBook) {
+              const bookInfo = foundBook.volumeInfo;
+              bookData = {
+                title: bookInfo.title || bestOl.title,
+                author: bookInfo.authors ? bookInfo.authors.join(", ") : (bestOl.author_name ? bestOl.author_name.join(", ") : ""),
+                totalPages: bookInfo.pageCount || bestOl.number_of_pages_median || bestOl.number_of_pages || 0,
+                coverUrl: bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : (bestOl.cover_i ? `https://covers.openlibrary.org/b/id/${bestOl.cover_i}-L.jpg` : "")
+              };
+            } else {
+              bookData = {
+                title: bestOl.title,
+                author: bestOl.author_name ? bestOl.author_name.join(", ") : "",
+                totalPages: bestOl.number_of_pages_median || bestOl.number_of_pages || 0,
+                coverUrl: bestOl.cover_i ? `https://covers.openlibrary.org/b/id/${bestOl.cover_i}-L.jpg` : ""
+              };
+            }
+          }
+        } catch (olError) {
+          console.error("OpenLibrary Search Error:", olError);
+        }
+      }
+
+      if (!bookData && foundBook) {
+        const bookInfo = foundBook.volumeInfo;
+        bookData = {
+          title: bookInfo.title,
+          author: bookInfo.authors ? bookInfo.authors.join(", ") : "",
+          totalPages: bookInfo.pageCount || 0,
+          coverUrl: bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : ""
+        };
+      }
+
+      // Validation: If ocrText is provided, check if the result is relevant
+      if (bookData && ocrText) {
+        const ocrLower = ocrText.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const titleWords = bookData.title.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+        const authorWords = bookData.author.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
+        
+        // Check if at least one significant word from title or author is in the OCR text (fuzzy check)
+        const titleMatch = titleWords.some((w: string) => ocrLower.includes(w.replace(/[^a-z0-9]/g, '')));
+        const authorMatch = authorWords.some((w: string) => ocrLower.includes(w.replace(/[^a-z0-9]/g, '')));
+        
+        if (!titleMatch && !authorMatch) {
+          console.log("Validation failed (soft) for:", bookData.title);
+          // We'll still return it but maybe it's less certain
+        }
+      }
+
+      // If both fail, try a fallback search with just the first 4 words of the title if the title is long
+      if (!bookData && title.split(' ').length > 4) {
+        try {
+          const shortTitle = title.split(' ').slice(0, 4).join(' ');
+          console.log("Trying fallback search with shorter title:", shortTitle);
+          const shortQuery = encodeURIComponent(`${shortTitle} ${author}`);
+          const shortResponse = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${shortQuery}&maxResults=5`);
+          const shortData = await shortResponse.json();
+          if (shortData.items && shortData.items.length > 0) {
+            const bestShort = shortData.items.find((item: any) => item.volumeInfo.pageCount) || shortData.items[0];
+            const bookInfo = bestShort.volumeInfo;
+            bookData = {
+              title: bookInfo.title,
+              author: bookInfo.authors ? bookInfo.authors.join(", ") : "",
+              totalPages: bookInfo.pageCount || 0,
+              coverUrl: bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : ""
+            };
+          }
+        } catch (shortError) {
+          console.error("Short Search Error:", shortError);
+        }
+      }
+
+      // Final fallback: Use Gemini with Google Search if we still have nothing and have an API key
+      if (!bookData && apiKey) {
+        try {
+          console.log("Using Gemini to find book details for:", title);
+          const ai = new GoogleGenAI({ apiKey });
+          const geminiResponse = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: `Identify the book with this title: "${title}" and author: "${author}". 
+            Search Amazon, Goodreads, and Google Books to find the exact page count for the most common paperback or hardcover edition. 
+            Be very precise. If you find multiple editions, use the most common one.`,
+            config: {
+              tools: [{ googleSearch: {} }],
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  author: { type: Type.STRING },
+                  totalPages: { type: Type.NUMBER },
+                },
+                required: ["title", "author"],
+              },
+            }
+          });
+          const result = JSON.parse(geminiResponse.text);
+          if (result.title) {
+            bookData = {
+              title: result.title,
+              author: result.author,
+              totalPages: result.totalPages || 0,
+              coverUrl: `https://picsum.photos/seed/${encodeURIComponent(result.title)}/400/600`
+            };
+            
+            // Try to get a real cover URL if possible
+            try {
+              const coverSearch = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(result.title + " " + result.author)}&maxResults=1`);
+              const coverData = await coverSearch.json();
+              if (coverData.items && coverData.items[0].volumeInfo.imageLinks) {
+                bookData.coverUrl = coverData.items[0].volumeInfo.imageLinks.thumbnail.replace('http:', 'https:');
+              }
+            } catch (e) {}
+          }
+        } catch (geminiError) {
+          console.error("Gemini Search fallback failed:", geminiError);
+        }
+      }
+
+      if (bookData) {
+        setNewBook(prev => ({
+          ...prev,
+          title: bookData.title || prev.title,
+          author: bookData.author || prev.author,
+          totalPages: bookData.totalPages || prev.totalPages,
+          coverUrl: bookData.coverUrl || prev.coverUrl
+        }));
+        return bookData;
+      }
+      return null;
+    } catch (error) {
+      console.error("Search Error:", error);
+      return null;
+    } finally {
+      setIsFetchingBook(false);
+    }
+  };
+
   const identifyBookFromImage = async (base64: string) => {
     setIsFetchingBook(true);
     setFetchError(null);
     try {
       const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
-        throw new Error("Gemini API key is missing. If you are on GitHub Pages, make sure to set GEMINI_API_KEY in your environment during the build process.");
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            inlineData: {
-              mimeType: "image/jpeg",
-              data: base64.split(",")[1],
-            },
-          },
-          { text: "Identify the book in this image. Return the title, author, and ISBN if possible. You MUST find the total page count. Use Google Search to look up the book on Amazon, Goodreads, or Google Books to find the exact page count for the most common paperback or hardcover edition. Do not leave totalPages as 0 if at all possible." },
-        ],
-        config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING },
-              author: { type: Type.STRING },
-              isbn: { type: Type.STRING },
-              totalPages: { type: Type.NUMBER },
-            },
-            required: ["title", "author"],
-          },
-        },
-      });
+      let identified = false;
 
-      const result = JSON.parse(response.text);
-      if (result.isbn) {
-        await fetchBookByISBN(result.isbn, base64, result.totalPages);
-      } else {
-        setNewBook(prev => ({
-          ...prev,
-          title: result.title || prev.title,
-          author: result.author || prev.author,
-          totalPages: result.totalPages || prev.totalPages,
-          coverUrl: base64,
-        }));
+      // Strategy 1: Use Gemini on the image directly (if key available)
+      if (apiKey) {
+        try {
+          console.log("Attempting Gemini image identification...");
+          const ai = new GoogleGenAI({ apiKey });
+          const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: [
+              {
+                inlineData: {
+                  mimeType: "image/jpeg",
+                  data: base64.split(",")[1],
+                },
+              },
+              { text: "Identify the book in this image. Return the title, author, and ISBN if possible. You MUST find the total page count. Use Google Search to look up the book on Amazon, Goodreads, or Google Books to find the exact page count for the most common paperback or hardcover edition. Do not leave totalPages as 0 if at all possible." },
+            ],
+            config: {
+              tools: [{ googleSearch: {} }],
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  title: { type: Type.STRING },
+                  author: { type: Type.STRING },
+                  isbn: { type: Type.STRING },
+                  totalPages: { type: Type.NUMBER },
+                },
+                required: ["title", "author"],
+              },
+            }
+          });
+          
+          const result = JSON.parse(response.text);
+          if (result.title) {
+            if (result.isbn) {
+              await fetchBookByISBN(result.isbn, base64, result.totalPages);
+            } else {
+              setNewBook(prev => ({
+                ...prev,
+                title: result.title || prev.title,
+                author: result.author || prev.author,
+                totalPages: result.totalPages || prev.totalPages,
+                coverUrl: base64,
+              }));
+            }
+            identified = true;
+          }
+        } catch (geminiError) {
+          console.error("Gemini image identification failed, falling back to OCR:", geminiError);
+        }
+      }
+
+      // Strategy 2: Fallback to Tesseract OCR
+      if (!identified) {
+        console.log("Using Tesseract OCR identification...");
+        const worker = await createWorker('eng');
+        const { data: { text } } = await worker.recognize(base64);
+        await worker.terminate();
+
+        if (text && text.trim()) {
+          // Try to extract ISBN first
+          const isbnMatch = text.match(/(?:ISBN(?:-1[03])?:? )?((?=[0-9X]{10}$|(?=(?:[0-9]+[- ]){3})[0-9\- ]{13}$|97[89][0-9]{10}$|(?=(?:[0-9]+[- ]){4})[0-9\- ]{17}$)(?:97[89][- ]?)?[0-9]{1,5}[- ]?[0-9]+[- ]?[0-9]+[- ]?[0-9X])/i);
+          if (isbnMatch) {
+            const isbn = isbnMatch[1].replace(/[- ]/g, "");
+            console.log("Found ISBN in OCR:", isbn);
+            await fetchBookByISBN(isbn, base64);
+            return;
+          }
+
+          const cleanLine = (l: string) => l.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+          const lines = text.split('\n').map(l => cleanLine(l)).filter(l => l.length > 3);
+          
+          if (lines.length === 0) {
+            throw new Error("Could not read any clear text from the image. Please try a clearer photo or enter details manually.");
+          }
+
+          let found = null;
+          
+          // Try standard API searches first
+          const query = lines.slice(0, 3).join(' ');
+          found = await searchBookByTitle(query, "", text);
+          
+          if (!found && lines.length > 0) {
+            found = await searchBookByTitle(lines[0], "", text);
+          }
+          
+          if (!found && lines.length > 1) {
+            const longestLine = lines.reduce((a, b) => a.length > b.length ? a : b);
+            found = await searchBookByTitle(longestLine, "", text);
+          }
+
+          // Strategy 4: Try each line individually if they look like titles/authors (at least 2 words)
+          if (!found) {
+            for (const line of lines.slice(0, 5)) {
+              if (line.split(' ').length >= 2) {
+                console.log("Trying Strategy 4 (Individual Line):", line);
+                found = await searchBookByTitle(line, "", text);
+                if (found) break;
+              }
+            }
+          }
+
+          // Strategy 5: Use Gemini to interpret OCR text (if standard search failed but key is available)
+          if (!found && apiKey) {
+            try {
+              console.log("Using Gemini to interpret OCR text...");
+              const ai = new GoogleGenAI({ apiKey });
+              const geminiResponse = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: `Based on this messy OCR text from a book cover, identify the book and its total page count: "${text}". 
+                Use Google Search to find the correct book details.`,
+                config: {
+                  tools: [{ googleSearch: {} }],
+                  responseMimeType: "application/json",
+                  responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                      title: { type: Type.STRING },
+                      author: { type: Type.STRING },
+                      totalPages: { type: Type.NUMBER },
+                    },
+                    required: ["title", "author"],
+                  },
+                }
+              });
+              const result = JSON.parse(geminiResponse.text);
+              if (result.title) {
+                setNewBook(prev => ({
+                  ...prev,
+                  title: result.title,
+                  author: result.author,
+                  totalPages: result.totalPages || 0,
+                  coverUrl: base64,
+                }));
+                found = result;
+              }
+            } catch (geminiOcrError) {
+              console.error("Gemini OCR interpretation failed:", geminiOcrError);
+            }
+          }
+
+          // Strategy 6: Last ditch effort - search for the longest word or first few words
+          if (!found) {
+            const allWords = text.split(/\s+/).filter(w => w.length > 4);
+            if (allWords.length > 0) {
+              const longestWord = allWords.reduce((a, b) => a.length > b.length ? a : b);
+              console.log("Trying Strategy 6 (Longest Word):", longestWord);
+              found = await searchBookByTitle(longestWord, "", text);
+            }
+          }
+
+          if (!found) {
+            const firstFewWords = text.split(/\s+/).slice(0, 3).join(' ');
+            if (firstFewWords.length > 5) {
+              console.log("Trying Strategy 7 (First Few Words):", firstFewWords);
+              found = await searchBookByTitle(firstFewWords, "", text);
+            }
+          }
+
+          // Strategy 8: Try searching for the first 2 words if 3 words failed
+          if (!found) {
+            const firstTwoWords = text.split(/\s+/).slice(0, 2).join(' ');
+            if (firstTwoWords.length > 4) {
+              console.log("Trying Strategy 8 (First Two Words):", firstTwoWords);
+              found = await searchBookByTitle(firstTwoWords, "", text);
+            }
+          }
+
+          if (found) {
+            setNewBook(prev => ({ ...prev, coverUrl: base64 }));
+          } else {
+            setFetchError("Could not identify book from the text on the cover. Please try a clearer photo or enter details manually.");
+          }
+        } else {
+          throw new Error("Could not read any text from the image. Please try a clearer photo or enter details manually.");
+        }
       }
     } catch (error: any) {
       console.error("Identification Error:", error);
-      if (error.message?.includes("API key")) {
-        setFetchError(error.message);
-      } else {
-        setFetchError("Failed to identify book. Please try again or enter details manually.");
-      }
+      setFetchError(error.message || "Failed to identify book. Please try again or enter details manually.");
     } finally {
       setIsFetchingBook(false);
     }
@@ -293,7 +589,7 @@ export default function App() {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Series));
       setSeriesList(data);
     }, (error) => {
-      console.error("Firestore Error (series):", error);
+      handleFirestoreError(error, OperationType.LIST, "series");
     });
 
     return () => unsubscribe();
@@ -311,7 +607,7 @@ export default function App() {
       const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Book));
       setBooks(data);
     }, (error) => {
-      console.error("Firestore Error (books):", error);
+      handleFirestoreError(error, OperationType.LIST, "books");
     });
 
     return () => unsubscribe();
@@ -452,8 +748,16 @@ export default function App() {
       await setDoc(doc(db, "books", bookId), book);
       setIsAddBookModalOpen(false);
       setNewBook({ title: "", author: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "", chapters: [] });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, "books");
+      setFetchError(null);
+    } catch (error: any) {
+      console.error("Add Book Error:", error);
+      setFetchError("Failed to add book. Please check your connection and try again.");
+      // We don't throw here so the modal stays open for the user to try again
+      try {
+        handleFirestoreError(error, OperationType.CREATE, "books");
+      } catch (e) {
+        // handleFirestoreError throws, but we already handled the UI part
+      }
     }
   };
 
@@ -1347,7 +1651,22 @@ export default function App() {
                 )}
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
-                  <input required value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} className="input-field" placeholder="e.g. The Fellowship of the Ring" />
+                  <div className="flex gap-2">
+                    <input required value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} className="input-field flex-1" placeholder="e.g. The Fellowship of the Ring" />
+                    <button 
+                      type="button"
+                      onClick={async () => {
+                        const result = await searchBookByTitle(newBook.title, newBook.author);
+                        if (!result) {
+                          setFetchError("No books found with that title. Please try adding more details or enter manually.");
+                        }
+                      }}
+                      className="p-3 bg-surface border border-border rounded-xl text-text-muted hover:text-accent hover:border-accent transition-all flex-shrink-0"
+                      title="Search for details"
+                    >
+                      <ArrowRight className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Author</label>

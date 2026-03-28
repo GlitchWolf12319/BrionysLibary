@@ -31,7 +31,10 @@ try {
 }
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+// Use the specific database ID from the config if it exists
+export const db = (firebaseConfig as any).firestoreDatabaseId 
+  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId)
+  : getFirestore(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // Auth helper
