@@ -33,7 +33,6 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { GoogleGenAI, Type } from "@google/genai";
-import { createWorker } from "tesseract.js";
 import { 
   format, 
   addMonths, 
@@ -183,7 +182,7 @@ export default function App() {
     return userGeminiKey || process.env.GEMINI_API_KEY;
   };
 
-  const searchBookByTitle = async (title: string, author: string = "", ocrText: string = "") => {
+  const searchBookByTitle = async (title: string, author: string = "") => {
     if (!title.trim()) return null;
     const apiKey = getGeminiKey();
     setIsFetchingBook(true);
@@ -197,19 +196,7 @@ export default function App() {
       let bookData = null;
 
       if (data.items && data.items.length > 0) {
-        // Find the best result (one with a page count AND matching OCR text if possible)
-        if (ocrText) {
-          const ocrLower = ocrText.toLowerCase().replace(/[^a-z0-9]/g, '');
-          const bestMatch = data.items.find((item: any) => {
-            const info = item.volumeInfo;
-            const titleMatch = info.title?.toLowerCase().split(/\s+/).some((w: string) => w.length > 3 && ocrLower.includes(w.replace(/[^a-z0-9]/g, '')));
-            const authorMatch = info.authors?.some((a: string) => a.toLowerCase().split(/\s+/).some((w: string) => w.length > 3 && ocrLower.includes(w.replace(/[^a-z0-9]/g, ''))));
-            return info.pageCount && (titleMatch || authorMatch);
-          });
-          foundBook = bestMatch || data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
-        } else {
-          foundBook = data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
-        }
+        foundBook = data.items.find((item: any) => item.volumeInfo.pageCount) || data.items[0];
       }
 
       // If Google Books didn't have a page count, or no results, try OpenLibrary
@@ -250,22 +237,6 @@ export default function App() {
           totalPages: bookInfo.pageCount || 0,
           coverUrl: bookInfo.imageLinks ? bookInfo.imageLinks.thumbnail.replace('http:', 'https:') : ""
         };
-      }
-
-      // Validation: If ocrText is provided, check if the result is relevant
-      if (bookData && ocrText) {
-        const ocrLower = ocrText.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const titleWords = bookData.title.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-        const authorWords = bookData.author.toLowerCase().split(/\s+/).filter((w: string) => w.length > 3);
-        
-        // Check if at least one significant word from title or author is in the OCR text (fuzzy check)
-        const titleMatch = titleWords.some((w: string) => ocrLower.includes(w.replace(/[^a-z0-9]/g, '')));
-        const authorMatch = authorWords.some((w: string) => ocrLower.includes(w.replace(/[^a-z0-9]/g, '')));
-        
-        if (!titleMatch && !authorMatch) {
-          console.log("Validation failed (soft) for:", bookData.title);
-          // We'll still return it but maybe it's less certain
-        }
       }
 
       // If both fail, try a fallback search with just the first 4 words of the title if the title is long
@@ -362,7 +333,6 @@ export default function App() {
     setFetchError(null);
     try {
       const apiKey = getGeminiKey();
-      let identified = false;
 
       // Strategy 1: Use Gemini on the image directly (if key available)
       if (apiKey) {
@@ -409,137 +379,13 @@ export default function App() {
                 coverUrl: base64,
               }));
             }
-            identified = true;
           }
         } catch (geminiError) {
-          console.error("Gemini image identification failed, falling back to OCR:", geminiError);
+          console.error("Gemini image identification failed:", geminiError);
+          setFetchError("AI identification failed. Please ensure your API key is correct or enter details manually.");
         }
-      }
-
-      // Strategy 2: Fallback to Tesseract OCR
-      if (!identified) {
-        console.log("Using Tesseract OCR identification...");
-        const worker = await createWorker('eng');
-        const { data: { text } } = await worker.recognize(base64);
-        await worker.terminate();
-
-        if (text && text.trim()) {
-          // Try to extract ISBN first
-          const isbnMatch = text.match(/(?:ISBN(?:-1[03])?:? )?((?=[0-9X]{10}$|(?=(?:[0-9]+[- ]){3})[0-9\- ]{13}$|97[89][0-9]{10}$|(?=(?:[0-9]+[- ]){4})[0-9\- ]{17}$)(?:97[89][- ]?)?[0-9]{1,5}[- ]?[0-9]+[- ]?[0-9]+[- ]?[0-9X])/i);
-          if (isbnMatch) {
-            const isbn = isbnMatch[1].replace(/[- ]/g, "");
-            console.log("Found ISBN in OCR:", isbn);
-            await fetchBookByISBN(isbn, base64);
-            return;
-          }
-
-          const cleanLine = (l: string) => l.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-          const lines = text.split('\n').map(l => cleanLine(l)).filter(l => l.length > 3);
-          
-          if (lines.length === 0) {
-            throw new Error("Could not read any clear text from the image. Please try a clearer photo or enter details manually.");
-          }
-
-          let found = null;
-          
-          // Try standard API searches first
-          const query = lines.slice(0, 3).join(' ');
-          found = await searchBookByTitle(query, "", text);
-          
-          if (!found && lines.length > 0) {
-            found = await searchBookByTitle(lines[0], "", text);
-          }
-          
-          if (!found && lines.length > 1) {
-            const longestLine = lines.reduce((a, b) => a.length > b.length ? a : b);
-            found = await searchBookByTitle(longestLine, "", text);
-          }
-
-          // Strategy 4: Try each line individually if they look like titles/authors (at least 2 words)
-          if (!found) {
-            for (const line of lines.slice(0, 5)) {
-              if (line.split(' ').length >= 2) {
-                console.log("Trying Strategy 4 (Individual Line):", line);
-                found = await searchBookByTitle(line, "", text);
-                if (found) break;
-              }
-            }
-          }
-
-          // Strategy 5: Use Gemini to interpret OCR text (if standard search failed but key is available)
-          if (!found && apiKey) {
-            try {
-              console.log("Using Gemini to interpret OCR text...");
-              const ai = new GoogleGenAI({ apiKey });
-              const geminiResponse = await ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: `Based on this messy OCR text from a book cover, identify the book and its total page count: "${text}". 
-                Use Google Search to find the correct book details.`,
-                config: {
-                  tools: [{ googleSearch: {} }],
-                  responseMimeType: "application/json",
-                  responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                      title: { type: Type.STRING },
-                      author: { type: Type.STRING },
-                      totalPages: { type: Type.NUMBER },
-                    },
-                    required: ["title", "author"],
-                  },
-                }
-              });
-              const result = JSON.parse(geminiResponse.text);
-              if (result.title) {
-                setNewBook(prev => ({
-                  ...prev,
-                  title: result.title,
-                  author: result.author,
-                  totalPages: result.totalPages || 0,
-                  coverUrl: base64,
-                }));
-                found = result;
-              }
-            } catch (geminiOcrError) {
-              console.error("Gemini OCR interpretation failed:", geminiOcrError);
-            }
-          }
-
-          // Strategy 6: Last ditch effort - search for the longest word or first few words
-          if (!found) {
-            const allWords = text.split(/\s+/).filter(w => w.length > 4);
-            if (allWords.length > 0) {
-              const longestWord = allWords.reduce((a, b) => a.length > b.length ? a : b);
-              console.log("Trying Strategy 6 (Longest Word):", longestWord);
-              found = await searchBookByTitle(longestWord, "", text);
-            }
-          }
-
-          if (!found) {
-            const firstFewWords = text.split(/\s+/).slice(0, 3).join(' ');
-            if (firstFewWords.length > 5) {
-              console.log("Trying Strategy 7 (First Few Words):", firstFewWords);
-              found = await searchBookByTitle(firstFewWords, "", text);
-            }
-          }
-
-          // Strategy 8: Try searching for the first 2 words if 3 words failed
-          if (!found) {
-            const firstTwoWords = text.split(/\s+/).slice(0, 2).join(' ');
-            if (firstTwoWords.length > 4) {
-              console.log("Trying Strategy 8 (First Two Words):", firstTwoWords);
-              found = await searchBookByTitle(firstTwoWords, "", text);
-            }
-          }
-
-          if (found) {
-            setNewBook(prev => ({ ...prev, coverUrl: base64 }));
-          } else {
-            setFetchError("Could not identify book from the text on the cover. Please try a clearer photo or enter details manually.");
-          }
-        } else {
-          throw new Error("Could not read any text from the image. Please try a clearer photo or enter details manually.");
-        }
+      } else {
+        setFetchError("Gemini API key is missing. Please add it in Settings to use the image scanner.");
       }
     } catch (error: any) {
       console.error("Identification Error:", error);
@@ -771,7 +617,7 @@ export default function App() {
     try {
       await setDoc(doc(db, "books", bookId), book);
       setIsAddBookModalOpen(false);
-      setNewBook({ title: "", author: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "", chapters: [] });
+      setNewBook({ title: "", author: "", isbn: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "", chapters: [] });
       setFetchError(null);
     } catch (error: any) {
       console.error("Add Book Error:", error);
