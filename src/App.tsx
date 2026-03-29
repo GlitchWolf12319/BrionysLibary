@@ -622,7 +622,7 @@ export default function App() {
   const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-  const [userGeminiKey, setUserGeminiKey] = useState(localStorage.getItem('user_gemini_key') || "");
+  const [userGeminiKey, setUserGeminiKey] = useState(localStorage.getItem('user_gemini_key') || process.env.GEMINI_API_KEY || "");
   const [isTestingKey, setIsTestingKey] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSelectSeriesModalOpen, setIsSelectSeriesModalOpen] = useState(false);
