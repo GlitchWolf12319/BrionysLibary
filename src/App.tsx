@@ -161,6 +161,15 @@ export default function App() {
         const base64 = reader.result as string;
         if (isIdentifyingMode) {
           setIsIdentifyingMode(false);
+          setNewBook({
+            title: "",
+            author: "",
+            totalPages: 0,
+            currentPage: 0,
+            coverUrl: "",
+            isWishlist: false,
+            isbn: ""
+          });
           await identifyBookFromImage(base64);
         } else if (selectedBookForDetail) {
           try {
@@ -179,7 +188,15 @@ export default function App() {
   };
 
   const getGeminiKey = () => {
-    return userGeminiKey || process.env.GEMINI_API_KEY;
+    let key = (userGeminiKey || process.env.GEMINI_API_KEY || "").trim();
+    // Strip quotes if user accidentally included them
+    if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
+    if (key.startsWith("'") && key.endsWith("'")) key = key.slice(1, -1);
+    
+    if (key === "MY_GEMINI_API_KEY" || key === "YOUR_API_KEY" || key === "AIzaSyA1_mb-WOIh1aG05TeYAii5-VXrH4d4Yx4" || key === "") {
+      return null;
+    }
+    return key;
   };
 
   const searchBookByTitle = async (title: string, author: string = "") => {
@@ -350,11 +367,12 @@ export default function App() {
                       data: base64.split(",")[1],
                     },
                   },
-                  { text: "Identify the book in this image. Return the title, author, and ISBN if possible. Also provide the total page count if you know it for the most common edition." },
+                  { text: "Identify the book in this image. Use Google Search to verify the exact title, author, and ISBN-13. Also provide the total page count for the most common edition. Be extremely accurate. If you are unsure, provide your best guess but prioritize finding a valid ISBN-13." },
                 ],
               },
             ],
             config: {
+              tools: [{ googleSearch: {} }],
               responseMimeType: "application/json",
               responseSchema: {
                 type: Type.OBJECT,
@@ -386,8 +404,10 @@ export default function App() {
         } catch (geminiError: any) {
           console.error("Gemini image identification failed:", geminiError);
           const errorMessage = geminiError.message || "";
-          if (errorMessage.includes("API_KEY_INVALID") || errorMessage.includes("403")) {
-            setFetchError("Invalid API Key. Please check your settings.");
+          if (errorMessage.includes("API_KEY_INVALID")) {
+            setFetchError("Invalid API Key. Please check your settings and ensure you've copied the full key correctly.");
+          } else if (errorMessage.includes("403")) {
+            setFetchError(`Access Denied (403): Your API key might be restricted, or the Gemini API is not enabled for your project. Details: ${errorMessage}`);
           } else if (errorMessage.includes("quota")) {
             setFetchError("API Quota exceeded. You've reached the limit for this API key. Please wait a bit, or create your own free key at aistudio.google.com and add it to Settings.");
           } else {
@@ -585,6 +605,7 @@ export default function App() {
           title: title || prev.title,
           author: author || prev.author,
           totalPages: totalPages || prev.totalPages,
+          isbn: isbn || prev.isbn,
           coverUrl: coverUrl || prev.coverUrl || `https://picsum.photos/seed/${isbn}/400/600`
         }));
         setIsScanning(false);
@@ -602,12 +623,42 @@ export default function App() {
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [userGeminiKey, setUserGeminiKey] = useState(localStorage.getItem('user_gemini_key') || "");
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [isSelectSeriesModalOpen, setIsSelectSeriesModalOpen] = useState(false);
   const [bookToMove, setBookToMove] = useState<Book | null>(null);
   const [editingSeries, setEditingSeries] = useState<Series | null>(null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
   const [editingBookNotes, setEditingBookNotes] = useState<Book | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
+
+  const testGeminiKey = async () => {
+    const apiKey = getGeminiKey();
+    if (!apiKey) {
+      setTestResult({ success: false, message: "No API key provided." });
+      return;
+    }
+
+    setIsTestingKey(true);
+    setTestResult(null);
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "Say 'Success' if you can hear me.",
+      });
+      if (response.text) {
+        setTestResult({ success: true, message: "Key is valid and working!" });
+      } else {
+        setTestResult({ success: false, message: "Key is valid but returned an empty response." });
+      }
+    } catch (error: any) {
+      console.error("Key test failed:", error);
+      setTestResult({ success: false, message: `Test failed: ${error.message || "Unknown error"}` });
+    } finally {
+      setIsTestingKey(false);
+    }
+  };
 
   // CRUD Operations
   const handleAddBook = async (e: FormEvent) => {
@@ -1722,18 +1773,34 @@ export default function App() {
                         const val = e.target.value;
                         setUserGeminiKey(val);
                         localStorage.setItem('user_gemini_key', val);
+                        setTestResult(null);
                       }}
                       className="input-field"
                       placeholder="Enter your API key..."
                     />
-                    <a 
-                      href="https://aistudio.google.com/app/apikey" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-[8px] text-accent hover:underline block text-right"
-                    >
-                      Get a free key here →
-                    </a>
+                    <div className="flex justify-between items-center">
+                      <button 
+                        onClick={testGeminiKey}
+                        disabled={isTestingKey || !userGeminiKey}
+                        className="py-1 px-3 rounded-lg bg-accent/10 text-accent font-bold text-[9px] uppercase tracking-widest hover:bg-accent/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isTestingKey ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                        {isTestingKey ? "Testing..." : "Test Key"}
+                      </button>
+                      <a 
+                        href="https://aistudio.google.com/app/apikey" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[8px] text-accent hover:underline"
+                      >
+                        Get a free key here →
+                      </a>
+                    </div>
+                    {testResult && (
+                      <p className={`text-[9px] font-bold p-2 rounded-lg ${testResult.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                        {testResult.message}
+                      </p>
+                    )}
                   </div>
                 </div>
 
