@@ -2,4 +2,5 @@
   "name": "Reading Collections",
   "description": "A local-first ethereal library for tracking your reading journey through starlight and ancient scrolls. Syncs with Firebase when signed in.",
   "requestFramePermissions": ["camera"]
+  
 }
