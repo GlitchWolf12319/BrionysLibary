@@ -375,76 +375,6 @@ export default function App() {
       setIsFetchingBook(false);
     }
   };
-  const [processingIsbns, setProcessingIsbns] = useState<Set<string>>(new Set());
-
-  const handleBatchScan = async (isbn: string) => {
-    if (!user) return;
-    
-    const cleanIsbn = isbn.replace(/[-\s]/g, "");
-    
-    // Avoid processing the same ISBN if it's already being processed or already in the batch
-    if (processingIsbns.has(cleanIsbn) || batchScannedBooks.some(b => b.isbn === cleanIsbn)) {
-      return;
-    }
-    
-    setProcessingIsbns(prev => new Set(prev).add(cleanIsbn));
-
-    try {
-      // Fetch book data
-      let response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
-      let data = await response.json();
-      
-      let title = "Unknown Book";
-      let author = "Unknown Author";
-      let totalPages = 0;
-      let coverUrl = `https://picsum.photos/seed/${cleanIsbn}/400/600`;
-
-      if (data.items && data.items.length > 0) {
-        const bookInfo = data.items[0].volumeInfo;
-        title = bookInfo.title || title;
-        author = bookInfo.authors ? bookInfo.authors.join(", ") : author;
-        totalPages = bookInfo.pageCount || 0;
-        if (bookInfo.imageLinks) {
-          const links = bookInfo.imageLinks;
-          const rawUrl = links.extraLarge || links.large || links.medium || links.small || links.thumbnail || links.smallThumbnail || "";
-          coverUrl = rawUrl.replace('http:', 'https:');
-        }
-      }
-
-      // Create book object
-      const bookId = doc(collection(db, "books")).id;
-      const newBatchBook: Book = {
-        id: bookId,
-        title,
-        author,
-        totalPages,
-        currentPage: 0,
-        coverUrl,
-        isbn: cleanIsbn,
-        seriesId: null, // Unsorted by default
-        isWishlist: false,
-        isDragonBook: false,
-        priority: books.length + batchScannedBooks.length,
-        uid: user.uid,
-        chapters: []
-      };
-
-      // Save to Firestore
-      await setDoc(doc(db, "books", bookId), newBatchBook);
-      
-      // Update local state for the batch list
-      setBatchScannedBooks(prev => [newBatchBook, ...prev]);
-      
-    } catch (error) {
-      console.error("Batch scan error:", error);
-    } finally {
-      setProcessingIsbns(prev => {
-        const next = new Set(prev);
-        next.delete(cleanIsbn);
-        return next;
-      });
-    }
-  };
   const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -474,6 +404,12 @@ export default function App() {
 
     try {
       await setDoc(doc(db, "books", bookId), book);
+      
+      // If batch modal is open, add to the batch list
+      if (isBatchScanModalOpen) {
+        setBatchScannedBooks(prev => [book, ...prev]);
+      }
+      
       setIsAddBookModalOpen(false);
       setNewBook({ title: "", author: "", isbn: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "", chapters: [] });
       setFetchError(null);
@@ -1392,7 +1328,7 @@ export default function App() {
         )}
 
         {isAddBookModalOpen && (
-          <div key="add-book-modal-container" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div key="add-book-modal-container" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsAddBookModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
             <motion.div 
               initial={{ opacity: 0, y: 20 }} 
@@ -1853,7 +1789,7 @@ export default function App() {
         )}
 
         {isScanning && (
-          <div key="scanning-modal-container" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div key="scanning-modal-container" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsScanning(false)} className="absolute inset-0 bg-bg/90 backdrop-blur-xl" />
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative w-full max-w-md card p-8">
               <div className="flex justify-between items-center mb-8">
@@ -1897,11 +1833,21 @@ export default function App() {
                   <button onClick={() => setIsBatchScanModalOpen(false)} className="p-2 text-text-muted hover:text-white md:hidden"><X className="w-5 h-5" /></button>
                 </div>
                 
-                <div className="flex-1 overflow-hidden rounded-3xl border border-border bg-surface/50">
-                  <BarcodeScanner 
-                    onScanSuccess={(isbn) => handleBatchScan(isbn)}
-                    shouldStopOnSuccess={false}
-                  />
+                <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-accent/20 rounded-3xl bg-accent/5 p-12 text-center group">
+                  <div className="w-24 h-24 rounded-full bg-accent/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500">
+                    <Camera className="w-10 h-10 text-accent" />
+                  </div>
+                  <h4 className="text-xl font-serif font-bold mb-2">Ready to Scan</h4>
+                  <p className="text-text-muted text-sm mb-8 max-w-xs">
+                    Click the button below to start scanning. Each book you add will appear in the list on the right.
+                  </p>
+                  <button 
+                    onClick={() => setIsScanning(true)}
+                    className="btn-primary px-12 py-4 flex items-center gap-3"
+                  >
+                    <Barcode className="w-5 h-5" />
+                    Start Scanner
+                  </button>
                 </div>
                 
                 <div className="mt-6 p-4 rounded-2xl bg-accent/5 border border-accent/10">
@@ -1910,7 +1856,7 @@ export default function App() {
                       <Zap className="w-4 h-4 text-accent" />
                     </div>
                     <p className="text-xs text-text-muted leading-relaxed">
-                      Books are automatically added to your library as you scan. You can organize them into collections later.
+                      This mode allows you to quickly add many books. You can organize them into collections later from your Inbox.
                     </p>
                   </div>
                 </div>
