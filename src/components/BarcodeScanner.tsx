@@ -5,12 +5,14 @@ import { Camera, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 interface BarcodeScannerProps {
   onScanSuccess: (decodedText: string) => void;
   onScanError?: (errorMessage: string) => void;
+  shouldStopOnSuccess?: boolean;
 }
 
-const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanError }) => {
+const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanError, shouldStopOnSuccess = true }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [lastScanned, setLastScanned] = useState<string | null>(null);
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
   const scannerId = "reader";
 
@@ -44,10 +46,23 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanEr
         { facingMode: "environment" }, // Prioritize back camera
         config,
         (decodedText) => {
-          // Success! Stop scanning and return result
-          stopScanner().then(() => {
+          // Prevent duplicate scans in rapid succession if not stopping
+          if (!shouldStopOnSuccess && decodedText === lastScanned) {
+            return;
+          }
+          
+          setLastScanned(decodedText);
+          
+          // Success! 
+          if (shouldStopOnSuccess) {
+            stopScanner().then(() => {
+              onScanSuccess(decodedText);
+            });
+          } else {
             onScanSuccess(decodedText);
-          });
+            // Reset lastScanned after a delay to allow scanning the same book again if needed
+            setTimeout(() => setLastScanned(null), 3000);
+          }
         },
         (errorMessage) => {
           // Filter common "not found" noise

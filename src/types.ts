@@ -15,6 +15,7 @@ export interface Book {
   title: string;
   author: string;
   coverUrl: string;
+  isbn?: string;
   currentPage: number;
   totalPages: number;
   seriesId?: string;

@@ -31,7 +31,8 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   Zap,
-  Search
+  Search,
+  Camera
 } from "lucide-react";
 import { 
   format, 
@@ -374,10 +375,82 @@ export default function App() {
       setIsFetchingBook(false);
     }
   };
+  const [processingIsbns, setProcessingIsbns] = useState<Set<string>>(new Set());
+
+  const handleBatchScan = async (isbn: string) => {
+    if (!user) return;
+    
+    const cleanIsbn = isbn.replace(/[-\s]/g, "");
+    
+    // Avoid processing the same ISBN if it's already being processed or already in the batch
+    if (processingIsbns.has(cleanIsbn) || batchScannedBooks.some(b => b.isbn === cleanIsbn)) {
+      return;
+    }
+    
+    setProcessingIsbns(prev => new Set(prev).add(cleanIsbn));
+
+    try {
+      // Fetch book data
+      let response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
+      let data = await response.json();
+      
+      let title = "Unknown Book";
+      let author = "Unknown Author";
+      let totalPages = 0;
+      let coverUrl = `https://picsum.photos/seed/${cleanIsbn}/400/600`;
+
+      if (data.items && data.items.length > 0) {
+        const bookInfo = data.items[0].volumeInfo;
+        title = bookInfo.title || title;
+        author = bookInfo.authors ? bookInfo.authors.join(", ") : author;
+        totalPages = bookInfo.pageCount || 0;
+        if (bookInfo.imageLinks) {
+          const links = bookInfo.imageLinks;
+          const rawUrl = links.extraLarge || links.large || links.medium || links.small || links.thumbnail || links.smallThumbnail || "";
+          coverUrl = rawUrl.replace('http:', 'https:');
+        }
+      }
+
+      // Create book object
+      const bookId = doc(collection(db, "books")).id;
+      const newBatchBook: Book = {
+        id: bookId,
+        title,
+        author,
+        totalPages,
+        currentPage: 0,
+        coverUrl,
+        isbn: cleanIsbn,
+        seriesId: null, // Unsorted by default
+        isWishlist: false,
+        isDragonBook: false,
+        priority: books.length + batchScannedBooks.length,
+        uid: user.uid,
+        chapters: []
+      };
+
+      // Save to Firestore
+      await setDoc(doc(db, "books", bookId), newBatchBook);
+      
+      // Update local state for the batch list
+      setBatchScannedBooks(prev => [newBatchBook, ...prev]);
+      
+    } catch (error) {
+      console.error("Batch scan error:", error);
+    } finally {
+      setProcessingIsbns(prev => {
+        const next = new Set(prev);
+        next.delete(cleanIsbn);
+        return next;
+      });
+    }
+  };
   const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSelectSeriesModalOpen, setIsSelectSeriesModalOpen] = useState(false);
+  const [isBatchScanModalOpen, setIsBatchScanModalOpen] = useState(false);
+  const [batchScannedBooks, setBatchScannedBooks] = useState<Book[]>([]);
   const [bookToMove, setBookToMove] = useState<Book | null>(null);
   const [editingSeries, setEditingSeries] = useState<Series | null>(null);
   const [selectedSeriesId, setSelectedSeriesId] = useState<string | null>(null);
@@ -847,19 +920,30 @@ export default function App() {
               )}
               
               {activeTab === "collections" && user && (
-                <button 
-                  onClick={() => {
-                    setEditingSeries(null);
-                    setNewSeries({ title: "", description: "", color: "#e6a8d7" });
-                    setIsSeriesModalOpen(true);
-                  }}
-                  className="group flex items-center gap-4 h-14 md:h-20 px-6 md:px-8 rounded-full border border-accent text-accent hover:bg-accent hover:text-bg transition-all duration-500"
-                >
-                  <Plus className="w-5 h-5 md:w-8 md:h-8" />
-                  <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em]">
-                    New Collection
-                  </span>
-                </button>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => setIsBatchScanModalOpen(true)}
+                    className="group flex items-center gap-4 h-14 md:h-20 px-6 md:px-8 rounded-full bg-accent text-bg hover:opacity-90 transition-all duration-500 shadow-xl shadow-accent/20"
+                  >
+                    <Camera className="w-5 h-5 md:w-8 md:h-8" />
+                    <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em]">
+                      Fast Scan
+                    </span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setEditingSeries(null);
+                      setNewSeries({ title: "", description: "", color: "#e6a8d7" });
+                      setIsSeriesModalOpen(true);
+                    }}
+                    className="group flex items-center gap-4 h-14 md:h-20 px-6 md:px-8 rounded-full border border-accent text-accent hover:bg-accent hover:text-bg transition-all duration-500"
+                  >
+                    <Plus className="w-5 h-5 md:w-8 md:h-8" />
+                    <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em]">
+                      New Collection
+                    </span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
@@ -909,6 +993,56 @@ export default function App() {
             >
               {activeTab === "collections" && (
                 <div className="space-y-12">
+                  {/* Unsorted Books (Inbox) */}
+                  {ownedBooks.filter(b => !b.seriesId).length > 0 && (
+                    <div className="card p-8 border-dashed border-accent/20 bg-accent/5">
+                      <div className="flex items-center justify-between mb-8">
+                        <div className="space-y-1">
+                          <h2 className="text-3xl font-serif font-bold text-white">
+                            Unsorted <span className="italic text-accent">Inbox</span>
+                          </h2>
+                          <p className="text-text-muted text-sm font-medium tracking-wide uppercase text-[10px]">
+                            {ownedBooks.filter(b => !b.seriesId).length} Books waiting to be organized
+                          </p>
+                        </div>
+                        <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
+                          <ShoppingBag className="w-6 h-6 text-accent" />
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                        {ownedBooks.filter(b => !b.seriesId).map(book => (
+                          <motion.div 
+                            key={book.id}
+                            layoutId={book.id}
+                            className="group cursor-pointer"
+                            onClick={() => setSelectedBookForDetail(book)}
+                          >
+                            <div className="aspect-[2/3] rounded-2xl overflow-hidden border border-border shadow-2xl relative group-hover:scale-[1.02] transition-transform duration-500">
+                              <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-bg/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-4 text-center gap-4">
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setBookToMove(book);
+                                    setIsSelectSeriesModalOpen(true);
+                                  }}
+                                  className="w-full py-2 bg-accent text-bg rounded-xl font-bold text-[10px] uppercase tracking-widest"
+                                >
+                                  Organize
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-3 space-y-1">
+                              <h3 className="font-serif text-sm leading-tight truncate text-white">{book.title}</h3>
+                              <p className="text-[10px] text-text-muted italic truncate">{book.author}</p>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {seriesList.map((series, sIdx) => {
                     const seriesBooks = ownedBooks.filter(b => b.seriesId === series.id);
                     const totalPages = seriesBooks.reduce((acc, b) => acc + b.totalPages, 0);
@@ -1744,6 +1878,100 @@ export default function App() {
                   className="btn-secondary py-4"
                 >
                   Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {isBatchScanModalOpen && (
+          <div key="batch-scanning-modal-container" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsBatchScanModalOpen(false)} className="absolute inset-0 bg-bg/90 backdrop-blur-xl" />
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative w-full max-w-4xl card p-8 flex flex-col md:flex-row gap-8 max-h-[90vh] overflow-hidden">
+              <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex justify-between items-center mb-6">
+                  <div className="space-y-1">
+                    <h3 className="text-2xl font-serif font-bold">Fast Scan Mode</h3>
+                    <p className="text-[10px] uppercase tracking-widest text-accent font-bold">Scanning for your library...</p>
+                  </div>
+                  <button onClick={() => setIsBatchScanModalOpen(false)} className="p-2 text-text-muted hover:text-white md:hidden"><X className="w-5 h-5" /></button>
+                </div>
+                
+                <div className="flex-1 overflow-hidden rounded-3xl border border-border bg-surface/50">
+                  <BarcodeScanner 
+                    onScanSuccess={(isbn) => handleBatchScan(isbn)}
+                    shouldStopOnSuccess={false}
+                  />
+                </div>
+                
+                <div className="mt-6 p-4 rounded-2xl bg-accent/5 border border-accent/10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-accent/20 flex items-center justify-center">
+                      <Zap className="w-4 h-4 text-accent" />
+                    </div>
+                    <p className="text-xs text-text-muted leading-relaxed">
+                      Books are automatically added to your library as you scan. You can organize them into collections later.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="w-full md:w-72 flex flex-col shrink-0">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Recently Added ({batchScannedBooks.length})</h4>
+                  {batchScannedBooks.length > 0 && (
+                    <button onClick={() => setBatchScannedBooks([])} className="text-[8px] uppercase tracking-widest text-red-400 font-bold hover:underline">Clear List</button>
+                  )}
+                </div>
+                
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 scrollbar-hide">
+                  <AnimatePresence initial={false}>
+                    {batchScannedBooks.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center opacity-20 py-12">
+                        <Barcode className="w-12 h-12 mb-4" />
+                        <p className="text-[10px] uppercase tracking-widest font-bold">Ready to scan</p>
+                      </div>
+                    ) : (
+                      batchScannedBooks.map((book) => (
+                        <motion.div 
+                          key={book.id}
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="flex gap-3 p-2 rounded-xl bg-surface border border-border group"
+                        >
+                          <div className="w-10 h-14 rounded-sm overflow-hidden shrink-0 border border-border">
+                            <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col justify-center">
+                            <h5 className="text-[10px] font-bold text-white truncate leading-tight">{book.title}</h5>
+                            <p className="text-[8px] text-text-muted truncate italic">{book.author}</p>
+                            <div className="flex items-center justify-between mt-1">
+                              <div className="flex items-center gap-1">
+                                <CheckCircle2 className="w-2 h-2 text-accent" />
+                                <span className="text-[6px] uppercase tracking-widest text-accent font-bold">Added</span>
+                              </div>
+                              <button 
+                                onClick={() => {
+                                  setBookToMove(book);
+                                  setIsSelectSeriesModalOpen(true);
+                                }}
+                                className="px-2 py-1 bg-accent/10 hover:bg-accent/20 text-accent rounded-md text-[6px] font-bold uppercase tracking-widest transition-colors"
+                              >
+                                Organize
+                              </button>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </div>
+                
+                <button 
+                  onClick={() => setIsBatchScanModalOpen(false)}
+                  className="mt-6 w-full py-4 bg-white text-bg rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-accent hover:text-white transition-all shadow-xl active:scale-[0.98]"
+                >
+                  Done Scanning
                 </button>
               </div>
             </motion.div>
