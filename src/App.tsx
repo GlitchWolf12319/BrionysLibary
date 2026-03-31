@@ -32,7 +32,9 @@ import {
   AlertTriangle,
   Zap,
   Search,
-  Star
+  Star,
+  GripVertical,
+  Edit2
 } from "lucide-react";
 
 import { 
@@ -51,11 +53,28 @@ import {
   parseISO
 } from "date-fns";
 import { debounce } from "lodash";
+import { 
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Book, Series, Chapter } from "./types";
 import BarcodeScanner from "./components/BarcodeScanner";
 import { auth, db, signInWithGoogle, logOut, handleFirestoreError, OperationType } from "./firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { collection, doc, setDoc, deleteDoc, onSnapshot, query, where, updateDoc } from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, onSnapshot, query, where, updateDoc, writeBatch } from "firebase/firestore";
 
 type Tab = "collections" | "calendar" | "wishlist" | "dragons";
 
@@ -119,6 +138,68 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
   );
 };
 
+const SortableBook: React.FC<{ book: Book; onClick: () => void; updateProgress: (id: string, page: number) => void }> = ({ book, onClick, updateProgress }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: book.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all ${isDragging ? 'shadow-2xl ring-2 ring-accent' : ''}`}
+      onClick={onClick}
+    >
+      <div className="absolute top-2 right-2 z-10 opacity-0 group-hover/book:opacity-100 transition-opacity" {...attributes} {...listeners}>
+        <div className="p-1 bg-black/50 rounded-md cursor-grab active:cursor-grabbing">
+          <GripVertical className="w-4 h-4 text-white" />
+        </div>
+      </div>
+      <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border">
+        <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" />
+      </div>
+      <div className="space-y-1 min-w-0">
+        <div className="flex justify-between items-start gap-1">
+          <div className="min-w-0">
+            <h3 className={`font-serif text-[11px] md:text-sm leading-tight truncate ${isRead ? 'text-text-muted line-through' : 'text-white'}`}>
+              {book.title}
+            </h3>
+            <p className="text-[9px] md:text-xs text-text-muted italic truncate">{book.author}</p>
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+            <ProgressInput 
+              bookId={book.id}
+              currentPage={book.currentPage}
+              totalPages={book.totalPages}
+              onUpdate={updateProgress}
+            />
+            <span className="text-[8px] md:text-[10px] text-accent font-bold">
+              {Math.round((book.currentPage / book.totalPages) * 100) || 0}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const StarRating = ({ rating, onRate, size = "md", interactive = true }: { rating: number, onRate: (rating: number) => void, size?: "sm" | "md" | "lg", interactive?: boolean }) => {
   const sizes = {
     sm: "w-3 h-3 md:w-4 h-4",
@@ -158,6 +239,63 @@ export default function App() {
   const [isScanning, setIsScanning] = useState(false);
   const [isFetchingBook, setIsFetchingBook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditingBookDetail, setIsEditingBookDetail] = useState(false);
+  const [editedBook, setEditedBook] = useState<Book | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent, seriesId: string) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const seriesBooks = ownedBooks.filter(b => b.seriesId === seriesId);
+      const oldIndex = seriesBooks.findIndex((book) => book.id === active.id);
+      const newIndex = seriesBooks.findIndex((book) => book.id === over.id);
+
+      const newOrder = arrayMove(seriesBooks, oldIndex, newIndex) as Book[];
+
+      // Update priorities in Firestore
+      const batch = writeBatch(db);
+      newOrder.forEach((book, index) => {
+        const bookRef = doc(db, "books", book.id);
+        batch.update(bookRef, { priority: index });
+      });
+
+      try {
+        await batch.commit();
+      } catch (error) {
+        handleFirestoreError(error, OperationType.UPDATE, "books");
+      }
+    }
+  };
+
+  const handleUpdateBook = async () => {
+    if (!editedBook) return;
+    setIsSaving(true);
+    try {
+      const bookRef = doc(db, "books", editedBook.id);
+      await updateDoc(bookRef, {
+        title: editedBook.title,
+        author: editedBook.author,
+        totalPages: editedBook.totalPages,
+        currentPage: editedBook.currentPage,
+        coverUrl: editedBook.coverUrl,
+        rating: editedBook.rating,
+        seriesId: editedBook.seriesId,
+      });
+      setSelectedBookForDetail(editedBook);
+      setIsEditingBookDetail(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, "books");
+    } finally {
+      setIsSaving(false);
+    }
+  };
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -182,7 +320,9 @@ export default function App() {
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result as string;
-        if (selectedBookForDetail) {
+        if (isEditingBookDetail && editedBook) {
+          setEditedBook({ ...editedBook, coverUrl: base64 });
+        } else if (selectedBookForDetail) {
           try {
             await updateDoc(doc(db, "books", selectedBookForDetail.id), { coverUrl: base64 });
             setSelectedBookForDetail(prev => prev ? { ...prev, coverUrl: base64 } : null);
@@ -745,7 +885,7 @@ export default function App() {
   }, [books]);
 
   const ownedBooks = useMemo(() => {
-    return books.filter(b => !b.isWishlist);
+    return books.filter(b => !b.isWishlist).sort((a, b) => (a.priority || 0) - (b.priority || 0));
   }, [books]);
 
   // Calendar logic
@@ -1060,59 +1200,39 @@ export default function App() {
                               exit={{ height: 0, opacity: 0 }}
                               className="overflow-hidden"
                             >
-                              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
-                                {seriesBooks.map((book, bIdx) => {
-                                  const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
-                                  return (
-                                    <motion.div 
-                                      key={`${book.id}-grid-${bIdx}`} 
-                                      layoutId={book.id}
-                                      onClick={() => setSelectedBookForDetail(book)}
-                                      className="card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all"
-                                    >
-                                      <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border">
-                                        <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" />
-                                      </div>
-                                      <div className="space-y-1 min-w-0">
-                                        <div className="flex justify-between items-start gap-1">
-                                          <div className="min-w-0">
-                                            <h3 className={`font-serif text-[11px] md:text-sm leading-tight truncate ${isRead ? 'text-text-muted line-through' : 'text-white'}`}>
-                                              {book.title}
-                                            </h3>
-                                            <p className="text-[9px] md:text-xs text-text-muted italic truncate">{book.author}</p>
-                                          </div>
-                                        </div>
-                                        
-                                        <div className="space-y-2">
-                                          <div className="flex justify-between items-center">
-                                            <ProgressInput 
-                                              bookId={book.id}
-                                              currentPage={book.currentPage}
-                                              totalPages={book.totalPages}
-                                              onUpdate={updateProgress}
-                                            />
-                                            <span className="text-[8px] md:text-[10px] text-accent font-bold">
-                                              {Math.round((book.currentPage / book.totalPages) * 100) || 0}%
-                                            </span>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </motion.div>
-                                  );
-                                })}
-                                <button 
-                                  onClick={() => {
-                                    setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
-                                    setIsAddBookModalOpen(true);
-                                  }}
-                                  className="border-2 border-dashed border-accent/30 rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-accent/60 hover:border-accent hover:text-accent hover:bg-accent/5 transition-all group/add"
+                              <DndContext
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={(event) => handleDragEnd(event, series.id)}
+                              >
+                                <SortableContext
+                                  items={seriesBooks.map(b => b.id)}
+                                  strategy={verticalListSortingStrategy}
                                 >
-                                  <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center group-hover/add:scale-110 transition-transform">
-                                    <Plus className="w-5 h-5 md:w-6 md:h-6" />
+                                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
+                                    {seriesBooks.map((book) => (
+                                      <SortableBook
+                                        key={book.id}
+                                        book={book}
+                                        onClick={() => setSelectedBookForDetail(book)}
+                                        updateProgress={updateProgress}
+                                      />
+                                    ))}
+                                    <button 
+                                      onClick={() => {
+                                        setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
+                                        setIsAddBookModalOpen(true);
+                                      }}
+                                      className="border-2 border-dashed border-accent/30 rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-accent/60 hover:border-accent hover:text-accent hover:bg-accent/5 transition-all group/add"
+                                    >
+                                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center group-hover/add:scale-110 transition-transform">
+                                        <Plus className="w-5 h-5 md:w-6 md:h-6" />
+                                      </div>
+                                      <span className="text-[9px] md:text-xs font-bold uppercase tracking-widest">Add Book</span>
+                                    </button>
                                   </div>
-                                  <span className="text-[9px] md:text-xs font-bold uppercase tracking-widest">Add Book</span>
-                                </button>
-                              </div>
+                                </SortableContext>
+                              </DndContext>
                             </motion.div>
                           )}
                         </AnimatePresence>
@@ -1732,16 +1852,140 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setSelectedBookForDetail(null)} 
-                  className="p-2 text-text-muted hover:text-white transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+                <div className="flex items-center gap-2">
+                  {!isEditingBookDetail ? (
+                    <button 
+                      onClick={() => {
+                        setEditedBook(currentBookDetail);
+                        setIsEditingBookDetail(true);
+                      }}
+                      className="p-2 text-text-muted hover:text-accent transition-colors"
+                    >
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={handleUpdateBook}
+                      disabled={isSaving}
+                      className="p-2 text-accent hover:text-accent/80 transition-colors"
+                    >
+                      {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => {
+                      setSelectedBookForDetail(null);
+                      setIsEditingBookDetail(false);
+                    }} 
+                    className="p-2 text-text-muted hover:text-white transition-colors"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
-                <div className="flex gap-4">
+                {isEditingBookDetail && editedBook ? (
+                  <div className="space-y-6">
+                    <div className="flex gap-6 items-start">
+                      <div 
+                        onClick={() => fileInputRef.current?.click()}
+                        className="group relative w-24 h-36 rounded-lg overflow-hidden border-2 border-dashed border-border hover:border-accent transition-all cursor-pointer bg-bg/50 flex flex-col items-center justify-center gap-2 shadow-inner flex-shrink-0"
+                      >
+                        {editedBook.coverUrl ? (
+                          <>
+                            <img src={editedBook.coverUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                              <Upload className="w-5 h-5 text-white" />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <ImageIcon className="w-6 h-6 text-text-muted group-hover:text-accent transition-colors" />
+                            <span className="text-[8px] font-bold uppercase tracking-widest text-text-muted group-hover:text-accent">Upload</span>
+                          </>
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
+                          <input 
+                            value={editedBook.title} 
+                            onChange={e => setEditedBook({...editedBook, title: e.target.value})} 
+                            className="input-field text-sm" 
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Author</label>
+                          <input 
+                            value={editedBook.author} 
+                            onChange={e => setEditedBook({...editedBook, author: e.target.value})} 
+                            className="input-field text-sm" 
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Current Page</label>
+                        <input 
+                          type="number"
+                          value={editedBook.currentPage} 
+                          onChange={e => setEditedBook({...editedBook, currentPage: parseInt(e.target.value) || 0})} 
+                          className="input-field text-sm" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Total Pages</label>
+                        <input 
+                          type="number"
+                          value={editedBook.totalPages} 
+                          onChange={e => setEditedBook({...editedBook, totalPages: parseInt(e.target.value) || 0})} 
+                          className="input-field text-sm" 
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Collection</label>
+                      <select 
+                        value={editedBook.seriesId || ""} 
+                        onChange={e => setEditedBook({...editedBook, seriesId: e.target.value})} 
+                        className="input-field text-sm"
+                      >
+                        <option value="">No Collection</option>
+                        {seriesList.map(s => (
+                          <option key={s.id} value={s.id}>{s.title}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Rating</label>
+                      <StarRating 
+                        rating={editedBook.rating || 0} 
+                        onRate={(r) => setEditedBook({...editedBook, rating: r})} 
+                        size="md"
+                      />
+                    </div>
+                    <div className="flex gap-3 pt-4">
+                      <button 
+                        onClick={handleUpdateBook}
+                        disabled={isSaving}
+                        className="flex-1 btn-primary flex items-center justify-center gap-2"
+                      >
+                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Save Changes
+                      </button>
+                      <button 
+                        onClick={() => setIsEditingBookDetail(false)}
+                        className="px-6 py-3 rounded-xl bg-surface border border-border text-text-muted hover:text-white transition-all font-bold text-xs uppercase tracking-widest"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-4">
                   {currentBookDetail.isWishlist ? (
                     <button 
                       onClick={() => {
@@ -1804,10 +2048,12 @@ export default function App() {
                     </div>
                   )}
                 </div>
-              </div>
-            </motion.div>
+              </>
+            )}
           </div>
-        )}
+        </motion.div>
+      </div>
+    )}
 
         {isScanning && (
           <div key="scanning-modal-container" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
