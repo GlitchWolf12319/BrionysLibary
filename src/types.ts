@@ -25,6 +25,7 @@ export interface Book {
   isDragonBook?: boolean;
   finishedDate?: string; // ISO string
   notes?: string; // Legacy field
+  rating?: number; // 1-5 stars
   journalEntries?: JournalEntry[];
   chapters?: Chapter[];
   uid: string;

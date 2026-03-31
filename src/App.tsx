@@ -31,7 +31,8 @@ import {
   Image as ImageIcon,
   AlertTriangle,
   Zap,
-  Search
+  Search,
+  Star
 } from "lucide-react";
 
 import { 
@@ -118,6 +119,35 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
   );
 };
 
+const StarRating = ({ rating, onRate, size = "md", interactive = true }: { rating: number, onRate: (rating: number) => void, size?: "sm" | "md" | "lg", interactive?: boolean }) => {
+  const sizes = {
+    sm: "w-3 h-3 md:w-4 h-4",
+    md: "w-5 h-5 md:w-6 h-6",
+    lg: "w-7 h-7 md:w-8 h-8"
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={!interactive}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (interactive) onRate(star);
+          }}
+          className={`${interactive ? 'cursor-pointer hover:scale-110 active:scale-95' : 'cursor-default'} focus:outline-none transition-all`}
+        >
+          <Star 
+            className={`${sizes[size]} ${star <= rating ? 'fill-accent text-accent' : 'text-text-muted/30'} transition-colors`} 
+          />
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -181,6 +211,7 @@ export default function App() {
     isDragonBook: false,
     coverUrl: "",
     chapters: [] as Chapter[],
+    rating: 0,
   });
 
   const [newSeries, setNewSeries] = useState({
@@ -293,19 +324,34 @@ export default function App() {
           const rawUrl = links.extraLarge || links.large || links.medium || links.small || links.thumbnail || links.smallThumbnail || "";
           coverUrl = rawUrl.replace('http:', 'https:');
           
-          // If it's a Google Books URL, we can often request a higher quality version by removing zoom and edge parameters
+          // If it's a Google Books URL, we can often request a higher quality version
           if (coverUrl.includes('books.google.com')) {
             const url = new URL(coverUrl);
-            url.searchParams.set('zoom', '1'); // Higher quality zoom level
-            url.searchParams.delete('edge');   // Remove edge effects
+            url.searchParams.set('zoom', '3'); // Try for highest quality zoom level (3 is usually large)
+            url.searchParams.delete('edge');   // Remove edge effects like curled corners
             coverUrl = url.toString();
           }
         }
       }
 
-      // Try OpenLibrary for more details or as a fallback
+      // Try to get a high-resolution cover from OpenLibrary directly as it's often better than Google's thumbnails
+      if (!coverUrl || coverUrl.includes('zoom=1') || coverUrl.includes('zoom=5')) {
+        console.log("Attempting to fetch high-res cover from OpenLibrary API...");
+        const olCoverUrl = `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-L.jpg?default=false`;
+        try {
+          const checkRes = await fetch(olCoverUrl, { method: 'HEAD' });
+          if (checkRes.ok) {
+            console.log("High-res OpenLibrary cover found!");
+            coverUrl = olCoverUrl;
+          }
+        } catch (e) {
+          console.log("OpenLibrary cover check failed, sticking with current cover.");
+        }
+      }
+
+      // Try OpenLibrary for more details or as a fallback for other data
       try {
-        console.log("Trying OpenLibrary fallback...");
+        console.log("Trying OpenLibrary fallback for metadata...");
         const olResponse = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&format=json&jscmd=data`);
         const olData = await olResponse.json();
         const olKey = `ISBN:${cleanIsbn}`;
@@ -318,19 +364,13 @@ export default function App() {
           if (totalPages === 0) {
             totalPages = olBook.number_of_pages || (olBook.pagination ? parseInt(olBook.pagination.replace(/\D/g, '')) : 0);
           }
-          if (!coverUrl && olBook.cover) {
+          // Only overwrite cover if we don't have a good one yet or if OL specifically has a large one
+          if ((!coverUrl || coverUrl.includes('zoom=1')) && olBook.cover) {
             coverUrl = olBook.cover.large || olBook.cover.medium || olBook.cover.small;
-          }
-          // If still no cover, try the direct OpenLibrary cover API
-          if (!coverUrl) {
-            coverUrl = `https://covers.openlibrary.org/b/isbn/${cleanIsbn}-L.jpg?default=false`;
-            // Check if this URL actually exists (optional, but good for robustness)
-            const checkRes = await fetch(coverUrl, { method: 'HEAD' });
-            if (!checkRes.ok) coverUrl = "";
           }
         }
       } catch (olError) {
-        console.error("OpenLibrary fetch failed:", olError);
+        console.error("OpenLibrary metadata fetch failed:", olError);
       }
 
       // If still no page count or cover, try a broader search on Google Books using title/author
@@ -413,7 +453,7 @@ export default function App() {
     try {
       await setDoc(doc(db, "books", bookId), book);
       setIsAddBookModalOpen(false);
-      setNewBook({ title: "", author: "", isbn: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "", chapters: [] });
+      setNewBook({ title: "", author: "", isbn: "", totalPages: 0, seriesId: "", isBought: true, isWishlist: false, isDragonBook: false, coverUrl: "", chapters: [], rating: 0 });
       setFetchError(null);
     } catch (error: any) {
       console.error("Add Book Error:", error);
@@ -1377,10 +1417,19 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
-                        <input required value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} className="input-field text-sm" placeholder="e.g. The Fellowship..." />
-                      </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Initial Rating (Optional)</label>
+                      <StarRating 
+                        rating={newBook.rating || 0} 
+                        onRate={(r) => setNewBook({...newBook, rating: r})} 
+                        size="md"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
+                      <input required value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} className="input-field text-sm" placeholder="e.g. The Fellowship..." />
+                    </div>
                     </div>
                   </div>
 
@@ -1657,7 +1706,22 @@ export default function App() {
                   </div>
                   <div>
                     <h3 className="text-2xl font-serif font-bold text-white mb-1">{currentBookDetail.title}</h3>
-                    <p className="text-text-muted italic mb-4">{currentBookDetail.author}</p>
+                    <p className="text-text-muted italic mb-2">{currentBookDetail.author}</p>
+                    <div className="mb-4">
+                      <StarRating 
+                        rating={currentBookDetail.rating || 0} 
+                        onRate={async (r) => {
+                          try {
+                            await updateDoc(doc(db, "books", currentBookDetail.id), { rating: r });
+                            // The onSnapshot listener will update the books list, but we update local state for immediate feedback
+                            setSelectedBookForDetail(prev => prev ? { ...prev, rating: r } : null);
+                          } catch (error) {
+                            handleFirestoreError(error, OperationType.UPDATE, "books");
+                          }
+                        }} 
+                        size="md"
+                      />
+                    </div>
                     <div className="flex items-center gap-3">
                       <ProgressInput 
                         bookId={currentBookDetail.id}
