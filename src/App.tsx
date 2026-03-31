@@ -53,24 +53,7 @@ import {
   parseISO
 } from "date-fns";
 import { debounce } from "lodash";
-import { 
-  DndContext, 
-  closestCenter,
-  closestCorners,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  rectSortingStrategy,
-  useSortable
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { arrayMove } from '@dnd-kit/sortable';
 import { Book, Series, Chapter } from "./types";
 import BarcodeScanner from "./components/BarcodeScanner";
 import { auth, db, signInWithGoogle, logOut, handleFirestoreError, OperationType } from "./firebase";
@@ -139,38 +122,52 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
   );
 };
 
-const SortableBook: React.FC<{ book: Book; onClick: () => void; updateProgress: (id: string, page: number) => void }> = ({ book, onClick, updateProgress }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging
-  } = useSortable({ id: book.id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 50 : undefined,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
+const BookCard: React.FC<{ 
+  book: Book; 
+  onClick: () => void; 
+  updateProgress: (id: string, page: number) => void;
+  onMove: (direction: 'left' | 'right') => void;
+  isFirst: boolean;
+  isLast: boolean;
+}> = ({ book, onClick, updateProgress, onMove, isFirst, isLast }) => {
   const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={`card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all ${isDragging ? 'shadow-2xl ring-2 ring-accent z-50' : ''}`}
+      className="card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all"
       onClick={onClick}
     >
-      <div 
-        className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border cursor-grab active:cursor-grabbing"
-        {...attributes} 
-        {...listeners}
-      >
+      <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border relative group/cover">
         <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" />
+        
+        {/* Move Arrows */}
+        <div className="absolute inset-0 flex items-center justify-between px-1 opacity-0 group-hover/cover:opacity-100 md:group-hover/cover:opacity-100 transition-opacity pointer-events-none">
+          {!isFirst && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMove('left');
+              }}
+              className="p-1.5 bg-black/60 hover:bg-accent text-white rounded-full transition-all pointer-events-auto shadow-lg backdrop-blur-sm"
+              title="Move Left"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          )}
+          <div className="flex-1" />
+          {!isLast && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMove('right');
+              }}
+              className="p-1.5 bg-black/60 hover:bg-accent text-white rounded-full transition-all pointer-events-auto shadow-lg backdrop-blur-sm"
+              title="Move Right"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
       <div className="space-y-1 min-w-0">
         <div className="flex justify-between items-start gap-1">
@@ -242,40 +239,25 @@ export default function App() {
   const [isEditingBookDetail, setIsEditingBookDetail] = useState(false);
   const [editedBook, setEditedBook] = useState<Book | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        delay: 250,
-        tolerance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const moveBook = async (book: Book, direction: 'left' | 'right', seriesBooks: Book[]) => {
+    const currentIndex = seriesBooks.findIndex(b => b.id === book.id);
+    const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
 
-  const handleDragEnd = async (event: DragEndEvent, seriesId: string) => {
-    const { active, over } = event;
+    if (newIndex < 0 || newIndex >= seriesBooks.length) return;
 
-    if (over && active.id !== over.id) {
-      const seriesBooks = ownedBooks.filter(b => b.seriesId === seriesId);
-      const oldIndex = seriesBooks.findIndex((book) => book.id === active.id);
-      const newIndex = seriesBooks.findIndex((book) => book.id === over.id);
+    const newOrder = arrayMove(seriesBooks, currentIndex, newIndex) as Book[];
 
-      const newOrder = arrayMove(seriesBooks, oldIndex, newIndex) as Book[];
-
-      // Update priorities in Firestore
-      const batch = writeBatch(db);
-      newOrder.forEach((book, index) => {
-        const bookRef = doc(db, "books", book.id);
-        batch.update(bookRef, { priority: index });
-      });
-
-      try {
-        await batch.commit();
-      } catch (error) {
-        handleFirestoreError(error, OperationType.UPDATE, "books");
-      }
+    // Update priorities in Firestore
+    const batch = writeBatch(db);
+    newOrder.forEach((b, index) => {
+      const bookRef = doc(db, "books", b.id);
+      batch.update(bookRef, { priority: index });
+    });
+    
+    try {
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, "books");
     }
   };
 
@@ -1205,39 +1187,31 @@ export default function App() {
                               exit={{ height: 0, opacity: 0 }}
                               className="overflow-hidden"
                             >
-                              <DndContext
-                                sensors={sensors}
-                                collisionDetection={closestCenter}
-                                onDragEnd={(event) => handleDragEnd(event, series.id)}
-                              >
-                                <SortableContext
-                                  items={seriesBooks.map(b => b.id)}
-                                  strategy={rectSortingStrategy}
+                              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
+                                {seriesBooks.map((book, index) => (
+                                  <BookCard
+                                    key={book.id}
+                                    book={book}
+                                    onClick={() => setSelectedBookForDetail(book)}
+                                    updateProgress={updateProgress}
+                                    onMove={(direction) => moveBook(book, direction, seriesBooks)}
+                                    isFirst={index === 0}
+                                    isLast={index === seriesBooks.length - 1}
+                                  />
+                                ))}
+                                <button 
+                                  onClick={() => {
+                                    setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
+                                    setIsAddBookModalOpen(true);
+                                  }}
+                                  className="border-2 border-dashed border-accent/30 rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-accent/60 hover:border-accent hover:text-accent hover:bg-accent/5 transition-all group/add"
                                 >
-                                  <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
-                                    {seriesBooks.map((book) => (
-                                      <SortableBook
-                                        key={book.id}
-                                        book={book}
-                                        onClick={() => setSelectedBookForDetail(book)}
-                                        updateProgress={updateProgress}
-                                      />
-                                    ))}
-                                    <button 
-                                      onClick={() => {
-                                        setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
-                                        setIsAddBookModalOpen(true);
-                                      }}
-                                      className="border-2 border-dashed border-accent/30 rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-accent/60 hover:border-accent hover:text-accent hover:bg-accent/5 transition-all group/add"
-                                    >
-                                      <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center group-hover/add:scale-110 transition-transform">
-                                        <Plus className="w-5 h-5 md:w-6 md:h-6" />
-                                      </div>
-                                      <span className="text-[9px] md:text-xs font-bold uppercase tracking-widest">Add Book</span>
-                                    </button>
+                                  <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center group-hover/add:scale-110 transition-transform">
+                                    <Plus className="w-5 h-5 md:w-6 md:h-6" />
                                   </div>
-                                </SortableContext>
-                              </DndContext>
+                                  <span className="text-[9px] md:text-xs font-bold uppercase tracking-widest">Add Book</span>
+                                </button>
+                              </div>
                             </motion.div>
                           )}
                         </AnimatePresence>
