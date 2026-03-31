@@ -17,11 +17,13 @@ const BarcodeScanner: React.FC<BarcodeScannerProps> = ({ onScanSuccess, onScanEr
   const scannerId = "reader";
 
   const startScanner = async () => {
+    console.log("Starting barcode scanner...");
     setIsLoading(true);
     setError(null);
     
     try {
       if (!html5QrCodeRef.current) {
+        console.log("Creating new Html5Qrcode instance for ID:", scannerId);
         html5QrCodeRef.current = new Html5Qrcode(scannerId);
       }
 

@@ -127,6 +127,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("collections");
   const [isScanning, setIsScanning] = useState(false);
   const [isFetchingBook, setIsFetchingBook] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -257,13 +258,16 @@ export default function App() {
   const fetchBookByISBN = async (isbn: string, customCoverUrl?: string, initialPages?: number) => {
     setIsFetchingBook(true);
     setFetchError("");
+    console.log("Fetching book for ISBN:", isbn);
     try {
       // Clean ISBN
       const cleanIsbn = isbn.replace(/[-\s]/g, "");
+      console.log("Cleaned ISBN:", cleanIsbn);
       
       // Try Google Books API first with ISBN
       let response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
       let data = await response.json();
+      console.log("Google Books API response:", data);
       
       let title = "";
       let author = "";
@@ -301,12 +305,14 @@ export default function App() {
 
       // Try OpenLibrary for more details or as a fallback
       try {
+        console.log("Trying OpenLibrary fallback...");
         const olResponse = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${cleanIsbn}&format=json&jscmd=data`);
         const olData = await olResponse.json();
         const olKey = `ISBN:${cleanIsbn}`;
         const olBook = olData[olKey];
         
         if (olBook) {
+          console.log("OpenLibrary data found:", olBook);
           if (!title) title = olBook.title || "";
           if (!author && olBook.authors) author = olBook.authors.map((a: any) => a.name).join(", ");
           if (totalPages === 0) {
@@ -329,6 +335,7 @@ export default function App() {
 
       // If still no page count or cover, try a broader search on Google Books using title/author
       if ((totalPages === 0 || !coverUrl) && (title || author)) {
+        console.log("Broadening search on Google Books...");
         const query = encodeURIComponent(title + (author ? " " + author : ""));
         const searchResponse = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${query}&maxResults=5`);
         const searchData = await searchResponse.json();
@@ -356,6 +363,7 @@ export default function App() {
       }
 
       if (title || author || totalPages > 0) {
+        console.log("Updating newBook state with:", { title, author, totalPages, coverUrl });
         setNewBook(prev => ({
           ...prev,
           title: title || prev.title,
@@ -366,6 +374,7 @@ export default function App() {
         }));
         setIsScanning(false);
       } else {
+        console.warn("No book data found for ISBN:", cleanIsbn);
         setFetchError("Book not found. Please enter details manually.");
       }
     } catch (error) {
@@ -390,6 +399,7 @@ export default function App() {
     e.preventDefault();
     if (!user) return;
 
+    setIsSaving(true);
     const bookId = doc(collection(db, "books")).id;
     const book: Book = {
       id: bookId,
@@ -414,6 +424,8 @@ export default function App() {
       } catch (e) {
         // handleFirestoreError throws, but we already handled the UI part
       }
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -421,6 +433,7 @@ export default function App() {
     e.preventDefault();
     if (!user) return;
 
+    setIsSaving(true);
     if (editingSeries) {
       try {
         await updateDoc(doc(db, "series", editingSeries.id), { ...newSeries });
@@ -443,21 +456,25 @@ export default function App() {
     setIsSeriesModalOpen(false);
     setEditingSeries(null);
     setNewSeries({ title: "", description: "", color: "#e6a8d7" });
+    setIsSaving(false);
   };
 
   const deleteSeries = async (id: string) => {
+    setIsSaving(true);
     try {
       await deleteDoc(doc(db, "series", id));
-      // Update books that were in this series
+      // Update books that were in this series in parallel
       const batch = books.filter(b => b.seriesId === id);
-      for (const book of batch) {
-        await updateDoc(doc(db, "books", book.id), { seriesId: "" });
-      }
+      const updatePromises = batch.map(book => updateDoc(doc(db, "books", book.id), { seriesId: "" }));
+      await Promise.all(updatePromises);
+      
       if (selectedSeriesId === id) {
         setSelectedSeriesId(null);
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, "series");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1243,8 +1260,10 @@ export default function App() {
               <div className="flex flex-col gap-3">
                 <button 
                   onClick={confirmModal.onConfirm}
-                  className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-500/20 active:scale-95"
+                  disabled={isSaving}
+                  className="w-full bg-red-500 hover:bg-red-600 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-red-500/20 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
+                  {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
                   Delete
                 </button>
                 <button 
@@ -1273,19 +1292,21 @@ export default function App() {
                   <p className="text-[8px] md:text-[10px] text-text-muted uppercase tracking-widest font-medium">Enter details manually or scan</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => setIsScanning(true)}
-                    className="p-2 bg-accent/10 text-accent hover:bg-accent/20 rounded-xl transition-all"
-                    title="Scan Barcode"
-                  >
-                    <Barcode className="w-4 h-4 md:w-5 md:h-5" />
-                  </button>
                   <button onClick={() => setIsAddBookModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 md:p-8 min-h-0 scrollbar-hide">
                 <form id="add-book-form" onSubmit={handleAddBook} className="space-y-5 md:space-y-8">
+                  <button 
+                    type="button"
+                    onClick={() => setIsScanning(true)}
+                    className="w-full py-4 bg-accent/10 border-2 border-dashed border-accent/30 rounded-2xl text-accent hover:bg-accent/20 transition-all flex items-center justify-center gap-3 group/scan"
+                  >
+                    <Barcode className="w-6 h-6 group-hover/scan:scale-110 transition-transform" />
+                    <span className="text-sm font-black uppercase tracking-[0.2em]">Scan Barcode</span>
+                  </button>
+
                   {fetchError && (
                     <div className="p-3 md:p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-[10px] font-bold uppercase tracking-widest flex justify-between items-center">
                       <span>{fetchError}</span>
@@ -1416,8 +1437,10 @@ export default function App() {
                 <button 
                   form="add-book-form"
                   type="submit" 
-                  className="w-full py-3.5 md:py-4 bg-accent text-bg rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-[0.2em] hover:opacity-90 transition-all shadow-xl shadow-accent/20 active:scale-[0.98]"
+                  disabled={isSaving}
+                  className="w-full py-3.5 md:py-4 bg-accent text-bg rounded-xl md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-[0.2em] hover:opacity-90 transition-all shadow-xl shadow-accent/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
+                  {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
                   Add {newBook.isWishlist ? "to Wishlist" : "to Collection"}
                 </button>
               </div>
@@ -1460,7 +1483,10 @@ export default function App() {
                     ))}
                   </div>
                 </div>
-                <button type="submit" className="btn-primary w-full mt-4">{editingSeries ? "Save Changes" : "Create Collection"}</button>
+                <button type="submit" disabled={isSaving} className="btn-primary w-full mt-4 flex items-center justify-center gap-2">
+                  {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {editingSeries ? "Save Changes" : "Create Collection"}
+                </button>
               </form>
             </motion.div>
           </div>
@@ -1728,7 +1754,10 @@ export default function App() {
                 <button onClick={() => setIsScanning(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
               </div>
               <BarcodeScanner 
-                onScanSuccess={(isbn) => fetchBookByISBN(isbn)}
+                onScanSuccess={(isbn) => {
+                  console.log("Barcode scanned successfully:", isbn);
+                  fetchBookByISBN(isbn);
+                }}
               />
               <div className="grid grid-cols-2 gap-3 mt-6">
                 <button 
