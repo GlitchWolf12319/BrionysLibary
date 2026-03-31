@@ -141,17 +141,17 @@ const BookCard: React.FC<{
         <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" />
         
         {/* Move Arrows */}
-        <div className="absolute inset-0 flex items-center justify-between px-1 opacity-0 group-hover/cover:opacity-100 md:group-hover/cover:opacity-100 transition-opacity pointer-events-none">
+        <div className="absolute inset-0 flex items-end justify-between px-1 pb-2 opacity-100 md:opacity-0 md:group-hover/cover:opacity-100 transition-opacity pointer-events-none">
           {!isFirst && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onMove('left');
               }}
-              className="p-1.5 bg-black/60 hover:bg-accent text-white rounded-full transition-all pointer-events-auto shadow-lg backdrop-blur-sm"
+              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg"
               title="Move Left"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5" />
             </button>
           )}
           <div className="flex-1" />
@@ -161,10 +161,10 @@ const BookCard: React.FC<{
                 e.stopPropagation();
                 onMove('right');
               }}
-              className="p-1.5 bg-black/60 hover:bg-accent text-white rounded-full transition-all pointer-events-auto shadow-lg backdrop-blur-sm"
+              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg"
               title="Move Right"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
