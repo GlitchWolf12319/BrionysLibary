@@ -56,6 +56,7 @@ import { debounce } from "lodash";
 import { 
   DndContext, 
   closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -66,7 +67,7 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
+  rectSortingStrategy,
   useSortable
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -161,15 +162,14 @@ const SortableBook: React.FC<{ book: Book; onClick: () => void; updateProgress: 
     <div
       ref={setNodeRef}
       style={style}
-      className={`card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all ${isDragging ? 'shadow-2xl ring-2 ring-accent' : ''}`}
+      className={`card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all ${isDragging ? 'shadow-2xl ring-2 ring-accent z-50' : ''}`}
       onClick={onClick}
     >
-      <div className="absolute top-2 right-2 z-10 opacity-0 group-hover/book:opacity-100 transition-opacity" {...attributes} {...listeners}>
-        <div className="p-1 bg-black/50 rounded-md cursor-grab active:cursor-grabbing">
-          <GripVertical className="w-4 h-4 text-white" />
-        </div>
-      </div>
-      <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border">
+      <div 
+        className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border cursor-grab active:cursor-grabbing"
+        {...attributes} 
+        {...listeners}
+      >
         <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" />
       </div>
       <div className="space-y-1 min-w-0">
@@ -243,7 +243,12 @@ export default function App() {
   const [editedBook, setEditedBook] = useState<Book | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -1207,7 +1212,7 @@ export default function App() {
                               >
                                 <SortableContext
                                   items={seriesBooks.map(b => b.id)}
-                                  strategy={verticalListSortingStrategy}
+                                  strategy={rectSortingStrategy}
                                 >
                                   <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
                                     {seriesBooks.map((book) => (
