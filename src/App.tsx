@@ -122,23 +122,23 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
   );
 };
 
-const BookCard: React.FC<{ 
+const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, isLast }: { 
   book: Book; 
   onClick: () => void; 
   updateProgress: (id: string, page: number) => void;
   onMove: (direction: 'left' | 'right') => void;
   isFirst: boolean;
   isLast: boolean;
-}> = ({ book, onClick, updateProgress, onMove, isFirst, isLast }) => {
+}) => {
   const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
 
   return (
     <div
-      className="card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all"
+      className="card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all active:scale-[0.98]"
       onClick={onClick}
     >
       <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border relative group/cover">
-        <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" />
+        <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" loading="lazy" />
         
         {/* Move Arrows */}
         <div className="absolute inset-0 flex items-end justify-between px-1 pb-2 opacity-100 md:opacity-0 md:group-hover/cover:opacity-100 transition-opacity pointer-events-none">
@@ -148,7 +148,7 @@ const BookCard: React.FC<{
                 e.stopPropagation();
                 onMove('left');
               }}
-              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg"
+              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg active:scale-90"
               title="Move Left"
             >
               <ChevronLeft className="w-3.5 h-3.5" />
@@ -161,7 +161,7 @@ const BookCard: React.FC<{
                 e.stopPropagation();
                 onMove('right');
               }}
-              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg"
+              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg active:scale-90"
               title="Move Right"
             >
               <ChevronRight className="w-3.5 h-3.5" />
@@ -195,7 +195,7 @@ const BookCard: React.FC<{
       </div>
     </div>
   );
-};
+});
 
 const StarRating = ({ rating, onRate, size = "md", interactive = true }: { rating: number, onRate: (rating: number) => void, size?: "sm" | "md" | "lg", interactive?: boolean }) => {
   const sizes = {
@@ -238,6 +238,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditingBookDetail, setIsEditingBookDetail] = useState(false);
   const [editedBook, setEditedBook] = useState<Book | null>(null);
+  const [duplicateBook, setDuplicateBook] = useState<Book | null>(null);
 
   const moveBook = async (book: Book, direction: 'left' | 'right', seriesBooks: Book[]) => {
     const currentIndex = seriesBooks.findIndex(b => b.id === book.id);
@@ -421,6 +422,15 @@ export default function App() {
       // Clean ISBN
       const cleanIsbn = isbn.replace(/[-\s]/g, "");
       console.log("Cleaned ISBN:", cleanIsbn);
+
+      // Check for duplicates first
+      const existingBook = books.find(b => b.isbn?.replace(/[-\s]/g, "") === cleanIsbn);
+      if (existingBook) {
+        setDuplicateBook(existingBook);
+        setIsScanning(false);
+        setIsFetchingBook(false);
+        return;
+      }
       
       // Try Google Books API first with ISBN
       let response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${cleanIsbn}`);
@@ -876,12 +886,34 @@ export default function App() {
   }, [books]);
 
   // Calendar logic
-  const renderCalendar = () => {
+  const calendarData = useMemo(() => {
+    if (activeTab !== "calendar") return { days: [], monthStart: new Date() };
+    
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(monthStart);
     const startDate = startOfWeek(monthStart);
     const endDate = endOfWeek(monthEnd);
-    const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
+    const days = eachDayOfInterval({ start: startDate, end: endDate });
+
+    // Pre-calculate activity for each day to avoid filtering in the render loop
+    const activityMap = new Map();
+    days.forEach(day => {
+      const dayStr = day.toDateString();
+      const activity = books.filter(b => {
+        const isFinishedToday = b.finishedDate && isSameDay(parseISO(b.finishedDate), day);
+        const hasEntryToday = b.journalEntries?.some(e => isSameDay(parseISO(e.date), day));
+        return isFinishedToday || hasEntryToday;
+      });
+      if (activity.length > 0) {
+        activityMap.set(dayStr, activity);
+      }
+    });
+
+    return { days, monthStart, activityMap };
+  }, [currentMonth, books, activeTab]);
+
+  const renderCalendar = () => {
+    const { days, monthStart, activityMap } = calendarData;
 
     return (
       <div className="space-y-6">
@@ -903,20 +935,16 @@ export default function App() {
               {day}
             </div>
           ))}
-          {calendarDays.map((day) => {
-            const dayKey = day.toISOString();
-            const booksWithActivityOnDay = books.filter(b => {
-              const isFinishedToday = b.finishedDate && isSameDay(parseISO(b.finishedDate), day);
-              const hasEntryToday = b.journalEntries?.some(e => isSameDay(parseISO(e.date), day));
-              return isFinishedToday || hasEntryToday;
-            });
+          {days.map((day) => {
+            const dayStr = day.toDateString();
+            const booksWithActivityOnDay = activityMap.get(dayStr) || [];
             
             const isCurrentMonth = isSameMonth(day, monthStart);
             const isToday = isSameDay(day, new Date());
 
             return (
               <div 
-                key={dayKey} 
+                key={day.toISOString()} 
                 className={`min-h-[60px] sm:min-h-[100px] md:min-h-[140px] p-1 md:p-2 transition-colors relative ${isCurrentMonth ? 'bg-surface' : 'bg-bg/40 opacity-30'}`}
               >
                 <span className={`text-[10px] md:text-xs font-mono ${isToday ? 'text-accent font-bold' : 'text-text-muted'}`}>
@@ -930,15 +958,13 @@ export default function App() {
                     const isFinishedToday = book.finishedDate && isSameDay(parseISO(book.finishedDate), day);
 
                     return (
-                      <motion.div
-                        key={`${book.id}-${dayKey}`}
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
+                      <div
+                        key={`${book.id}-${dayStr}`}
                         onClick={() => setSelectedBookForDetail(book)}
                         className="w-5 h-8 sm:w-8 sm:h-12 md:w-12 md:h-18 rounded-[2px] md:rounded-sm overflow-hidden border border-bg shadow-lg cursor-pointer hover:scale-110 transition-transform relative group"
                         style={{ outline: series ? `1px solid ${series.color}` : 'none', outlineOffset: '1px' }}
                       >
-                        <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
                         <div className="absolute inset-0 bg-accent/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-0.5 md:gap-1">
                           {entriesToday.length > 0 && (
                             <div className="bg-accent text-bg text-[6px] md:text-[8px] font-bold px-0.5 md:px-1 rounded-full">
@@ -953,7 +979,7 @@ export default function App() {
                             style={{ backgroundColor: series.color }}
                           />
                         )}
-                      </motion.div>
+                      </div>
                     );
                   })}
                 </div>
@@ -2039,8 +2065,8 @@ export default function App() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsScanning(false)} className="absolute inset-0 bg-bg/90 backdrop-blur-xl" />
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative w-full max-w-md card p-8">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-serif font-bold">Scan Barcode</h3>
-                <button onClick={() => setIsScanning(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                <h3 className="text-2xl font-serif font-bold text-white">Scan Barcode</h3>
+                <button onClick={() => setIsScanning(false)} className="p-2 text-text-muted hover:text-white transition-colors"><X className="w-5 h-5" /></button>
               </div>
               <BarcodeScanner 
                 onScanSuccess={(isbn) => {
@@ -2054,15 +2080,58 @@ export default function App() {
                     setIsScanning(false);
                     setIsAddBookModalOpen(true);
                   }}
-                  className="btn-primary py-4"
+                  className="btn-primary py-4 text-[10px] uppercase tracking-widest font-bold"
                 >
                   Manual Entry
                 </button>
                 <button 
                   onClick={() => setIsScanning(false)}
-                  className="btn-secondary py-4"
+                  className="btn-secondary py-4 text-[10px] uppercase tracking-widest font-bold"
                 >
                   Cancel
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {duplicateBook && (
+          <div key="duplicate-modal-container" className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setDuplicateBook(null)} 
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.9 }} 
+              className="relative w-full max-w-[320px] bg-surface border border-white/10 rounded-[32px] p-8 text-center shadow-2xl"
+            >
+              <div className="w-14 h-14 bg-accent/10 text-accent rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Library className="w-7 h-7" />
+              </div>
+              <h3 className="text-xl font-serif font-bold mb-2 text-white">Already Owned</h3>
+              <p className="text-text-muted text-sm mb-8 leading-relaxed">
+                You already have <span className="text-white font-bold italic">"{duplicateBook.title}"</span> in your library.
+              </p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => {
+                    setSelectedBookForDetail(duplicateBook);
+                    setDuplicateBook(null);
+                  }}
+                  className="w-full bg-accent hover:bg-accent/90 text-bg font-bold py-4 rounded-2xl transition-all shadow-lg shadow-accent/20 active:scale-95"
+                >
+                  View Book
+                </button>
+                <button 
+                  onClick={() => setDuplicateBook(null)}
+                  className="w-full py-4 text-text-muted hover:text-white font-bold transition-colors text-sm"
+                >
+                  Dismiss
                 </button>
               </div>
             </motion.div>
