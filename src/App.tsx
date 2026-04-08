@@ -138,24 +138,66 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
 
   return (
     <div className="w-full py-4 group/slider">
-      <div className="relative h-1 w-full bg-white/10 rounded-full cursor-pointer touch-none"
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-accent">Slide to update progress</span>
+        </div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-xl font-black text-white">{localValue}</span>
+          <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">/ {totalPages}</span>
+        </div>
+      </div>
+
+      <div className="relative h-12 w-full flex items-center cursor-pointer touch-none"
         ref={sliderRef}
         onMouseDown={handleStart}
         onTouchStart={handleStart}
       >
+        {/* Background Track with Ticks */}
+        <div className="h-3 w-full bg-white/5 rounded-full relative overflow-hidden border border-white/5">
+          <div 
+            className="absolute top-0 left-0 h-full bg-gradient-to-r from-accent/40 to-accent rounded-full transition-all duration-75 shadow-[0_0_15px_rgba(230,168,215,0.3)]"
+            style={{ width: `${progress}%` }}
+          />
+          {/* Subtle Ticks */}
+          <div className="absolute inset-0 flex justify-between px-4 pointer-events-none opacity-20">
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="w-[1px] h-full bg-white/20" />
+            ))}
+          </div>
+        </div>
+        
+        {/* Enhanced Handle */}
         <div 
-          className="absolute top-0 left-0 h-full bg-accent rounded-full transition-all duration-75"
-          style={{ width: `${progress}%` }}
-        />
-        <div 
-          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl transition-transform ${isDragging ? 'scale-125' : 'scale-0 group-hover/slider:scale-100'}`}
-          style={{ left: `calc(${progress}% - 6px)` }}
-        />
+          className={`absolute top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center transition-all z-10 ${isDragging ? 'scale-110' : 'scale-100'}`}
+          style={{ left: `calc(${progress}% - 16px)` }}
+        >
+          <div className="absolute inset-0 bg-accent rounded-full blur-md opacity-20 animate-pulse" />
+          <div className="relative w-6 h-6 bg-white rounded-full shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center border-2 border-accent">
+            <div className="flex gap-0.5">
+              <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
+              <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
+              <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
+            </div>
+          </div>
+          
+          {/* Floating Value Tooltip */}
+          {isDragging && (
+            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-accent text-bg px-3 py-1 rounded-lg font-black text-xs shadow-xl whitespace-nowrap">
+              {localValue}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="flex justify-between items-center mt-2 text-[10px] font-medium text-text-muted tracking-tight">
-        <span>{localValue} pages</span>
-        <span className="text-white font-bold">{Math.round(progress)}%</span>
-        <span>{totalPages} total</span>
+      
+      <div className="flex justify-between items-center mt-2">
+        <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Start</span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[14px] font-black text-accent">{Math.round(progress)}%</span>
+          <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Completed</span>
+        </div>
+        <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Finish</span>
       </div>
     </div>
   );
