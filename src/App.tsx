@@ -1916,19 +1916,27 @@ export default function App() {
         </div>
       </nav>
 
-      {/* Mobile Floating Action Button */}
-      {activeTab === "collections" && user && !viewingSeriesId && (
-        <button 
-          onClick={() => {
-            setEditingSeries(null);
-            setNewSeries({ title: "", description: "", color: "#e6a8d7", coverUrl: "" });
-            setIsSeriesModalOpen(true);
-          }}
-          className="fixed bottom-28 right-6 z-40 w-16 h-16 rounded-full bg-accent text-bg shadow-2xl flex items-center justify-center md:hidden active:scale-90 transition-transform"
-        >
-          <Plus className="w-10 h-10" />
-        </button>
-      )}
+              {/* Mobile Floating Action Button */}
+              {activeTab === "collections" && user && !viewingSeriesId && (
+                <div className="fixed bottom-28 right-6 z-40 flex flex-col gap-4 items-end md:hidden">
+                  <button 
+                    onClick={() => setIsScanning(true)}
+                    className="w-14 h-14 rounded-full bg-accent/20 backdrop-blur-md border border-accent/30 text-accent shadow-2xl flex items-center justify-center active:scale-90 transition-transform"
+                  >
+                    <Barcode className="w-8 h-8" />
+                  </button>
+                  <button 
+                    onClick={() => {
+                      setEditingSeries(null);
+                      setNewSeries({ title: "", description: "", color: "#e6a8d7", coverUrl: "" });
+                      setIsSeriesModalOpen(true);
+                    }}
+                    className="w-16 h-16 rounded-full bg-accent text-bg shadow-2xl flex items-center justify-center active:scale-90 transition-transform"
+                  >
+                    <Plus className="w-10 h-10" />
+                  </button>
+                </div>
+              )}
 
       {/* Modals */}
       <AnimatePresence>
@@ -2665,14 +2673,13 @@ export default function App() {
                 <button onClick={() => setIsScanning(false)} className="p-2 text-text-muted hover:text-white transition-colors"><X className="w-6 h-6" /></button>
               </div>
               
-              <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/40 relative aspect-video">
+              <div className="rounded-2xl overflow-visible border border-white/10 bg-black/40 relative">
                 <BarcodeScanner 
                   onScanSuccess={(isbn) => {
                     console.log("Barcode scanned successfully:", isbn);
                     fetchBookByISBN(isbn);
                   }}
                 />
-                <div className="absolute inset-0 border-2 border-accent/30 pointer-events-none animate-pulse" />
               </div>
 
               <div className="grid grid-cols-2 gap-4 mt-8">
