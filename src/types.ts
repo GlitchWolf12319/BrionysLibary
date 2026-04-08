@@ -29,6 +29,7 @@ export interface Book {
   journalEntries?: JournalEntry[];
   chapters?: Chapter[];
   uid: string;
+  updatedAt?: string; // ISO string
 }
 
 export interface Series {
@@ -36,5 +37,7 @@ export interface Series {
   title: string;
   description?: string;
   color?: string;
+  coverUrl?: string;
   uid: string;
+  updatedAt?: string; // ISO string
 }

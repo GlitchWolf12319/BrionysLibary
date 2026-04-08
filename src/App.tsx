@@ -34,8 +34,28 @@ import {
   Search,
   Star,
   GripVertical,
-  Edit2
+  Edit2,
+  Clock,
+  GripHorizontal
 } from "lucide-react";
+
+import { 
+  DndContext, 
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { 
   format, 
@@ -53,7 +73,6 @@ import {
   parseISO
 } from "date-fns";
 import { debounce } from "lodash";
-import { arrayMove } from '@dnd-kit/sortable';
 import { Book, Series, Chapter } from "./types";
 import BarcodeScanner from "./components/BarcodeScanner";
 import { auth, db, signInWithGoogle, logOut, handleFirestoreError, OperationType } from "./firebase";
@@ -63,60 +82,80 @@ import { collection, doc, setDoc, deleteDoc, onSnapshot, query, where, updateDoc
 type Tab = "collections" | "calendar" | "wishlist" | "dragons";
 
 const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: string, currentPage: number, totalPages: number, onUpdate: (id: string, page: number) => void }) => {
-  const [localValue, setLocalValue] = useState(currentPage.toString());
-  const [isEditing, setIsEditing] = useState(false);
+  const [localValue, setLocalValue] = useState(currentPage);
+  const [isDragging, setIsDragging] = useState(false);
+  const sliderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setLocalValue(currentPage.toString());
-  }, [currentPage]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setLocalValue(e.target.value);
-    setIsEditing(true);
-  };
-
-  const handleSave = () => {
-    const val = Math.min(Math.max(0, parseInt(localValue) || 0), totalPages);
-    if (val !== currentPage) {
-      onUpdate(bookId, val);
+    if (!isDragging) {
+      setLocalValue(currentPage);
     }
-    setIsEditing(false);
+  }, [currentPage, isDragging]);
+
+  const updateFromEvent = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!sliderRef.current) return;
+    const rect = sliderRef.current.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    const percentage = x / rect.width;
+    const newValue = Math.round(percentage * totalPages);
+    setLocalValue(newValue);
+    return newValue;
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSave();
-      e.currentTarget.blur();
-    }
+  const handleStart = (e: React.MouseEvent | React.TouchEvent) => {
+    setIsDragging(true);
+    updateFromEvent(e);
   };
 
-  const progress = totalPages > 0 ? (currentPage / totalPages) * 100 : 0;
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (e: MouseEvent | TouchEvent) => {
+      // @ts-ignore
+      updateFromEvent(e);
+    };
+
+    const handleEnd = () => {
+      setIsDragging(false);
+      onUpdate(bookId, localValue);
+    };
+
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleEnd);
+    window.addEventListener('touchmove', handleMove);
+    window.addEventListener('touchend', handleEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleEnd);
+      window.removeEventListener('touchmove', handleMove);
+      window.removeEventListener('touchend', handleEnd);
+    };
+  }, [isDragging, localValue, bookId, onUpdate]);
+
+  const progress = totalPages > 0 ? (localValue / totalPages) * 100 : 0;
 
   return (
-    <div className="relative flex items-center gap-3 group">
-      <div className="relative flex flex-col gap-1">
-        <div className="flex items-center gap-2">
-          <input 
-            type="number"
-            min="0"
-            max={totalPages}
-            value={localValue}
-            onClick={(e) => e.stopPropagation()}
-            onFocus={() => setIsEditing(true)}
-            onChange={handleChange}
-            onBlur={handleSave}
-            onKeyDown={handleKeyDown}
-            className="w-14 md:w-16 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[11px] md:text-xs text-white focus:border-accent focus:ring-1 focus:ring-accent/30 outline-none font-mono transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none text-center"
-          />
-          <span className="text-[10px] text-text-muted font-bold uppercase tracking-widest">/ {totalPages}</span>
-        </div>
-        <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
-          <motion.div 
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            className="h-full bg-accent shadow-[0_0_8px_rgba(255,99,33,0.5)]"
-          />
-        </div>
+    <div className="w-full py-4 group/slider">
+      <div className="relative h-1 w-full bg-white/10 rounded-full cursor-pointer touch-none"
+        ref={sliderRef}
+        onMouseDown={handleStart}
+        onTouchStart={handleStart}
+      >
+        <div 
+          className="absolute top-0 left-0 h-full bg-accent rounded-full transition-all duration-75"
+          style={{ width: `${progress}%` }}
+        />
+        <div 
+          className={`absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-xl transition-transform ${isDragging ? 'scale-125' : 'scale-0 group-hover/slider:scale-100'}`}
+          style={{ left: `calc(${progress}% - 6px)` }}
+        />
+      </div>
+      <div className="flex justify-between items-center mt-2 text-[10px] font-medium text-text-muted tracking-tight">
+        <span>{localValue} pages</span>
+        <span className="text-white font-bold">{Math.round(progress)}%</span>
+        <span>{totalPages} total</span>
       </div>
     </div>
   );
@@ -134,24 +173,28 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
 
   return (
     <div
-      className="card p-2 flex flex-col gap-2 group/book relative cursor-pointer hover:border-accent transition-all active:scale-[0.98]"
+      className="group/book relative flex flex-col gap-2 p-2 rounded-lg bg-surface hover:bg-surface-hover transition-all duration-300 cursor-pointer active:scale-[0.98]"
       onClick={onClick}
     >
-      <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border relative group/cover">
-        <img src={book.coverUrl} className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} referrerPolicy="no-referrer" loading="lazy" />
+      <div className="aspect-[2/3] w-full rounded-md overflow-hidden shadow-xl relative group/cover">
+        <img 
+          src={book.coverUrl} 
+          className={`w-full h-full object-cover transition-transform duration-700 group-hover/cover:scale-110 ${isRead ? 'grayscale opacity-40' : ''}`} 
+          referrerPolicy="no-referrer" 
+          loading="lazy" 
+        />
         
-        {/* Move Arrows */}
-        <div className="absolute inset-0 flex items-end justify-between px-1 pb-2 opacity-100 md:opacity-0 md:group-hover/cover:opacity-100 transition-opacity pointer-events-none">
+        {/* Move Arrows - Minimalist */}
+        <div className="absolute inset-0 flex items-center justify-between px-1 opacity-0 group-hover/cover:opacity-100 transition-opacity pointer-events-none">
           {!isFirst && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onMove('left');
               }}
-              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg active:scale-90"
-              title="Move Left"
+              className="p-1.5 bg-black/80 backdrop-blur-md text-white rounded-full transition-all pointer-events-auto hover:bg-accent hover:text-black active:scale-90"
             >
-              <ChevronLeft className="w-3.5 h-3.5" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
           )}
           <div className="flex-1" />
@@ -161,37 +204,148 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
                 e.stopPropagation();
                 onMove('right');
               }}
-              className="p-1.5 bg-black/40 backdrop-blur-md border border-white/10 hover:bg-accent hover:border-accent/50 text-white rounded-full transition-all pointer-events-auto shadow-lg active:scale-90"
-              title="Move Right"
+              className="p-1.5 bg-black/80 backdrop-blur-md text-white rounded-full transition-all pointer-events-auto hover:bg-accent hover:text-black active:scale-90"
             >
-              <ChevronRight className="w-3.5 h-3.5" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           )}
         </div>
       </div>
-      <div className="space-y-1 min-w-0">
-        <div className="flex justify-between items-start gap-1">
-          <div className="min-w-0">
-            <h3 className={`font-serif text-[11px] md:text-sm leading-tight truncate ${isRead ? 'text-text-muted line-through' : 'text-white'}`}>
-              {book.title}
-            </h3>
-            <p className="text-[9px] md:text-xs text-text-muted italic truncate">{book.author}</p>
-          </div>
+
+      <div className="px-1 py-1">
+        <h3 className={`font-bold text-xs md:text-sm leading-tight truncate ${isRead ? 'text-text-muted' : 'text-white'}`}>
+          {book.title}
+        </h3>
+        <p className="text-[10px] text-text-muted truncate mt-0.5">{book.author}</p>
+      </div>
+    </div>
+  );
+});
+
+const SeriesCardHorizontal = ({ series, onClick }: { series: Series, onClick: () => void, key?: React.Key }) => (
+  <div 
+    onClick={onClick}
+    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 rounded-md overflow-hidden cursor-pointer transition-all active:scale-[0.98] group"
+  >
+    <div className="w-14 h-14 flex-shrink-0 bg-surface-hover shadow-lg">
+      {series.coverUrl ? (
+        <img src={series.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center">
+          <Library className="w-5 h-5 text-text-muted opacity-20" />
         </div>
-        
-        <div className="space-y-2">
-          <div className="flex justify-between items-center">
-            <ProgressInput 
-              bookId={book.id}
-              currentPage={book.currentPage}
-              totalPages={book.totalPages}
-              onUpdate={updateProgress}
-            />
-            <span className="text-[8px] md:text-[10px] text-accent font-bold">
-              {Math.round((book.currentPage / book.totalPages) * 100) || 0}%
-            </span>
-          </div>
+      )}
+    </div>
+    <span className="text-[11px] font-bold text-white truncate pr-2 group-hover:text-accent transition-colors">{series.title}</span>
+  </div>
+);
+
+const SeriesCardSquare = ({ series, onClick }: { series: Series, onClick: () => void, key?: React.Key }) => (
+  <div 
+    onClick={onClick}
+    className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-36 flex-shrink-0"
+  >
+    <div className="aspect-square w-full rounded-lg overflow-hidden shadow-2xl relative">
+      {series.coverUrl ? (
+        <img src={series.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-surface-hover">
+          <Library className="w-8 h-8 text-text-muted opacity-20" />
         </div>
+      )}
+      <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-accent text-bg flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl">
+        <ArrowRight className="w-4 h-4 fill-current" />
+      </div>
+    </div>
+    <div className="space-y-0.5">
+      <h3 className="text-xs font-bold text-white truncate">{series.title}</h3>
+      <p className="text-[10px] text-text-muted line-clamp-2 leading-tight">Collection • {series.description || "Your reading journey"}</p>
+    </div>
+  </div>
+); const BookListItem = React.memo(({ book, onClick, onMore }: { 
+  book: Book; 
+  onClick: () => void; 
+  onMore: (e: React.MouseEvent) => void;
+}) => {
+  const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
+
+  return (
+    <div
+      className="flex items-center gap-3 p-2 rounded-md transition-colors cursor-pointer group/item flex-1 min-w-0"
+      onClick={onClick}
+    >
+      <div className="w-10 h-10 rounded-sm overflow-hidden shadow-lg flex-shrink-0">
+        <img 
+          src={book.coverUrl} 
+          className={`w-full h-full object-cover ${isRead ? 'grayscale opacity-40' : ''}`} 
+          referrerPolicy="no-referrer" 
+          loading="lazy" 
+        />
+      </div>
+      <div className="flex-1 min-w-0">
+        <h3 className={`font-bold text-[13px] truncate ${isRead ? 'text-text-muted' : 'text-white'}`}>
+          {book.title}
+        </h3>
+        <p className="text-[11px] text-text-muted truncate">{book.author}</p>
+      </div>
+      <button 
+        onClick={onMore}
+        className="p-2 text-text-muted hover:text-white transition-opacity"
+      >
+        <MoreVertical className="w-4 h-4" />
+      </button>
+    </div>
+  );
+});
+
+const SortableBookItem = React.memo(({ 
+  book, 
+  idx, 
+  onClick, 
+  onMore 
+}: { 
+  book: Book; 
+  idx: number; 
+  onClick: () => void; 
+  onMore: (e: React.MouseEvent) => void;
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: book.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : 'auto',
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef} 
+      style={style} 
+      className="grid grid-cols-[44px_1fr_48px] gap-4 items-center group/row hover:bg-white/5 rounded-md transition-colors px-2"
+    >
+      <div 
+        {...attributes} 
+        {...listeners} 
+        className="flex items-center justify-center text-text-muted group-hover/row:text-white cursor-grab active:cursor-grabbing py-4"
+      >
+        <GripVertical className="w-3 h-3 mr-1 opacity-0 group-hover/row:opacity-100 transition-opacity" />
+        <span className="text-xs font-medium">{idx + 1}</span>
+      </div>
+      <BookListItem
+        book={book}
+        onClick={onClick}
+        onMore={onMore}
+      />
+      <div className="text-right text-[10px] font-bold text-accent pr-2">
+        {Math.round((book.currentPage / (book.totalPages || 1)) * 100)}%
       </div>
     </div>
   );
@@ -199,13 +353,13 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
 
 const StarRating = ({ rating, onRate, size = "md", interactive = true }: { rating: number, onRate: (rating: number) => void, size?: "sm" | "md" | "lg", interactive?: boolean }) => {
   const sizes = {
-    sm: "w-3 h-3 md:w-4 h-4",
-    md: "w-5 h-5 md:w-6 h-6",
-    lg: "w-7 h-7 md:w-8 h-8"
+    sm: "w-3 h-3",
+    md: "w-6 h-6 md:w-7 md:h-7",
+    lg: "w-8 h-8 md:w-10 md:h-10"
   };
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2 md:gap-3">
       {[1, 2, 3, 4, 5].map((star) => (
         <button
           key={star}
@@ -215,10 +369,10 @@ const StarRating = ({ rating, onRate, size = "md", interactive = true }: { ratin
             e.stopPropagation();
             if (interactive) onRate(star);
           }}
-          className={`${interactive ? 'cursor-pointer hover:scale-110 active:scale-95' : 'cursor-default'} focus:outline-none transition-all`}
+          className={`${interactive ? 'cursor-pointer hover:scale-125 active:scale-90' : 'cursor-default'} focus:outline-none transition-all duration-300`}
         >
           <Star 
-            className={`${sizes[size]} ${star <= rating ? 'fill-accent text-accent' : 'text-text-muted/30'} transition-colors`} 
+            className={`${sizes[size]} ${star <= rating ? 'fill-accent text-accent' : 'text-white/10 fill-white/5'} transition-colors`} 
           />
         </button>
       ))}
@@ -275,6 +429,7 @@ export default function App() {
         coverUrl: editedBook.coverUrl,
         rating: editedBook.rating,
         seriesId: editedBook.seriesId,
+        updatedAt: new Date().toISOString()
       });
       setSelectedBookForDetail(editedBook);
       setIsEditingBookDetail(false);
@@ -284,6 +439,48 @@ export default function App() {
       setIsSaving(false);
     }
   };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const series = seriesList.find(s => s.id === viewingSeriesId);
+    if (!series) return;
+
+    const seriesBooks = books.filter(b => b.seriesId === series.id).sort((a, b) => (a.priority || 0) - (b.priority || 0));
+    const oldIndex = seriesBooks.findIndex(b => b.id === active.id.toString());
+    const newIndex = seriesBooks.findIndex(b => b.id === over.id.toString());
+
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newOrder = arrayMove(seriesBooks, oldIndex, newIndex) as Book[];
+    
+    // Update priorities in Firestore
+    const batch = writeBatch(db);
+    newOrder.forEach((book: Book, idx: number) => {
+      const bookRef = doc(db, "books", book.id);
+      batch.update(bookRef, { priority: idx, updatedAt: new Date().toISOString() });
+    });
+    
+    try {
+      await batch.commit();
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, "books");
+    }
+  };
+
+  const [libraryFilter, setLibraryFilter] = useState<"All" | "Collections" | "Wishlist" | "Dragons">("All");
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -300,19 +497,76 @@ export default function App() {
   const [selectedBookForDetail, setSelectedBookForDetail] = useState<Book | null>(null);
   const [isAddChapterModalOpen, setIsAddChapterModalOpen] = useState(false);
   const [newChapterData, setNewChapterData] = useState({ title: "", notes: "" });
+  const [viewingSeriesId, setViewingSeriesId] = useState<string | null>(null);
+  const [isUploadingSeriesCover, setIsUploadingSeriesCover] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const compressImage = (base64Str: string, maxWidth = 600, maxHeight = 900): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width / height > maxWidth / maxHeight) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = () => resolve(base64Str);
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert("File is too large. Please select an image under 5MB.");
+        return;
+      }
+
+      setIsSaving(true);
       const reader = new FileReader();
       reader.onloadend = async () => {
-        const base64 = reader.result as string;
-        if (isEditingBookDetail && editedBook) {
+        const rawBase64 = reader.result as string;
+        const base64 = await compressImage(rawBase64);
+
+        if (isUploadingSeriesCover && viewingSeriesId) {
+          try {
+            const seriesRef = doc(db, "series", viewingSeriesId);
+            await updateDoc(seriesRef, { 
+              coverUrl: base64,
+              updatedAt: new Date().toISOString()
+            });
+            setIsUploadingSeriesCover(false);
+          } catch (error) {
+            handleFirestoreError(error, OperationType.UPDATE, "series");
+          }
+        } else if (isSeriesModalOpen) {
+          setNewSeries(prev => ({ ...prev, coverUrl: base64 }));
+        } else if (isEditingBookDetail && editedBook) {
           setEditedBook({ ...editedBook, coverUrl: base64 });
         } else if (selectedBookForDetail) {
           try {
-            await updateDoc(doc(db, "books", selectedBookForDetail.id), { coverUrl: base64 });
+            await updateDoc(doc(db, "books", selectedBookForDetail.id), { 
+              coverUrl: base64,
+              updatedAt: new Date().toISOString()
+            });
             setSelectedBookForDetail(prev => prev ? { ...prev, coverUrl: base64 } : null);
           } catch (error) {
             handleFirestoreError(error, OperationType.UPDATE, "books");
@@ -320,6 +574,7 @@ export default function App() {
         } else {
           setNewBook(prev => ({ ...prev, coverUrl: base64 }));
         }
+        setIsSaving(false);
       };
       reader.readAsDataURL(file);
       e.target.value = '';
@@ -346,6 +601,7 @@ export default function App() {
     title: "",
     description: "",
     color: "#e6a8d7",
+    coverUrl: "",
   });
 
   // Auth Listener
@@ -563,6 +819,19 @@ export default function App() {
   };
   const [isAddBookModalOpen, setIsAddBookModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
+  const [scrollY, setScrollY] = useState(0);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrollY(window.scrollY);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [activeTab, viewingSeriesId]);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isSelectSeriesModalOpen, setIsSelectSeriesModalOpen] = useState(false);
   const [bookToMove, setBookToMove] = useState<Book | null>(null);
@@ -584,7 +853,8 @@ export default function App() {
       coverUrl: newBook.coverUrl || `https://picsum.photos/seed/${newBook.title}/400/600`,
       currentPage: 0,
       priority: books.length,
-      uid: user.uid
+      uid: user.uid,
+      updatedAt: new Date().toISOString()
     };
 
     try {
@@ -613,7 +883,10 @@ export default function App() {
     setIsSaving(true);
     if (editingSeries) {
       try {
-        await updateDoc(doc(db, "series", editingSeries.id), { ...newSeries });
+        await updateDoc(doc(db, "series", editingSeries.id), { 
+          ...newSeries,
+          updatedAt: new Date().toISOString()
+        });
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, "series");
       }
@@ -622,7 +895,8 @@ export default function App() {
       const series: Series = {
         id: seriesId,
         ...newSeries,
-        uid: user.uid
+        uid: user.uid,
+        updatedAt: new Date().toISOString()
       };
       try {
         await setDoc(doc(db, "series", seriesId), series);
@@ -710,7 +984,10 @@ export default function App() {
 
     const updatedChapters = [...(book.chapters || []), newChapter];
     try {
-      await updateDoc(doc(db, "books", bookId), { chapters: updatedChapters });
+      await updateDoc(doc(db, "books", bookId), { 
+        chapters: updatedChapters,
+        updatedAt: new Date().toISOString()
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "books");
     }
@@ -734,7 +1011,10 @@ export default function App() {
     );
 
     try {
-      await updateDoc(doc(db, "books", bookId), { chapters: updatedChapters });
+      await updateDoc(doc(db, "books", bookId), { 
+        chapters: updatedChapters,
+        updatedAt: new Date().toISOString()
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "books");
     }
@@ -747,7 +1027,10 @@ export default function App() {
     const updatedChapters = book.chapters.filter(c => c.id !== chapterId);
 
     try {
-      await updateDoc(doc(db, "books", bookId), { chapters: updatedChapters });
+      await updateDoc(doc(db, "books", bookId), { 
+        chapters: updatedChapters,
+        updatedAt: new Date().toISOString()
+      });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "books");
     }
@@ -759,7 +1042,8 @@ export default function App() {
       try {
         await updateDoc(doc(db, "books", id), {
           currentPage: page,
-          finishedDate: isFinished ? (finishedDate || new Date().toISOString()) : null
+          finishedDate: isFinished ? (finishedDate || new Date().toISOString()) : null,
+          updatedAt: new Date().toISOString()
         });
       } catch (error) {
         handleFirestoreError(error, OperationType.UPDATE, "books");
@@ -792,7 +1076,8 @@ export default function App() {
     try {
       await updateDoc(doc(db, "books", id), {
         currentPage: newPage,
-        finishedDate: !isRead ? new Date().toISOString() : null
+        finishedDate: !isRead ? new Date().toISOString() : null,
+        updatedAt: new Date().toISOString()
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "books");
@@ -812,7 +1097,8 @@ export default function App() {
 
     try {
       await updateDoc(doc(db, "books", id), {
-        journalEntries: [...(b.journalEntries || []), newEntry]
+        journalEntries: [...(b.journalEntries || []), newEntry],
+        updatedAt: new Date().toISOString()
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "books");
@@ -825,7 +1111,8 @@ export default function App() {
 
     try {
       await updateDoc(doc(db, "books", bookId), {
-        journalEntries: b.journalEntries?.filter(e => e.id !== entryId)
+        journalEntries: b.journalEntries?.filter(e => e.id !== entryId),
+        updatedAt: new Date().toISOString()
       });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "books");
@@ -838,7 +1125,8 @@ export default function App() {
       await updateDoc(doc(db, "books", bookToMove.id), { 
         isWishlist: false, 
         seriesId,
-        totalPages: bookToMove.totalPages 
+        totalPages: bookToMove.totalPages,
+        updatedAt: new Date().toISOString()
       });
       setIsSelectSeriesModalOpen(false);
       setBookToMove(null);
@@ -882,7 +1170,11 @@ export default function App() {
   }, [books]);
 
   const ownedBooks = useMemo(() => {
-    return books.filter(b => !b.isWishlist).sort((a, b) => (a.priority || 0) - (b.priority || 0));
+    return books.filter(b => !b.isWishlist).sort((a, b) => {
+      const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return dateB - dateA;
+    });
   }, [books]);
 
   // Calendar logic
@@ -918,20 +1210,20 @@ export default function App() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-2xl md:text-3xl font-serif font-bold text-white">{format(currentMonth, "MMMM yyyy")}</h2>
-          <div className="flex gap-2">
-            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 text-text-muted hover:text-accent transition-colors">
-              <ChevronLeft className="w-5 h-5 md:w-6 md:h-6" />
+          <h2 className="text-xl md:text-2xl font-bold text-white">{format(currentMonth, "MMMM yyyy")}</h2>
+          <div className="flex gap-1">
+            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 text-text-muted hover:text-white transition-colors">
+              <ChevronLeft className="w-5 h-5" />
             </button>
-            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 text-text-muted hover:text-accent transition-colors">
-              <ChevronRight className="w-5 h-5 md:w-6 md:h-6" />
+            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 text-text-muted hover:text-white transition-colors">
+              <ChevronRight className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-px bg-border rounded-2xl md:rounded-3xl overflow-hidden border border-border shadow-2xl">
+        <div className="grid grid-cols-7 gap-px bg-white/5 rounded-lg overflow-hidden border border-white/5">
           {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
-            <div key={`${day}-${i}`} className="bg-surface p-2 md:p-4 text-center text-[8px] md:text-[10px] uppercase tracking-widest text-text-muted font-bold">
+            <div key={`${day}-${i}`} className="bg-surface p-3 text-center text-[10px] font-bold text-text-muted">
               {day}
             </div>
           ))}
@@ -945,39 +1237,24 @@ export default function App() {
             return (
               <div 
                 key={day.toISOString()} 
-                className={`min-h-[60px] sm:min-h-[100px] md:min-h-[140px] p-1 md:p-2 transition-colors relative ${isCurrentMonth ? 'bg-surface' : 'bg-bg/40 opacity-30'}`}
+                className={`min-h-[80px] md:min-h-[120px] p-2 transition-colors relative ${isCurrentMonth ? 'bg-surface' : 'bg-black/20 opacity-20'}`}
               >
-                <span className={`text-[10px] md:text-xs font-mono ${isToday ? 'text-accent font-bold' : 'text-text-muted'}`}>
+                <span className={`text-[10px] font-medium ${isToday ? 'text-accent font-bold' : 'text-text-muted'}`}>
                   {format(day, "d")}
                 </span>
                 
-                <div className="mt-1 md:mt-2 flex flex-wrap gap-0.5 md:gap-1">
+                <div className="mt-2 flex flex-wrap gap-1">
                   {booksWithActivityOnDay.map(book => {
-                    const series = seriesList.find(s => s.id === book.seriesId);
                     const entriesToday = book.journalEntries?.filter(e => isSameDay(parseISO(e.date), day)) || [];
-                    const isFinishedToday = book.finishedDate && isSameDay(parseISO(book.finishedDate), day);
-
                     return (
                       <div
                         key={`${book.id}-${dayStr}`}
                         onClick={() => setSelectedBookForDetail(book)}
-                        className="w-5 h-8 sm:w-8 sm:h-12 md:w-12 md:h-18 rounded-[2px] md:rounded-sm overflow-hidden border border-bg shadow-lg cursor-pointer hover:scale-110 transition-transform relative group"
-                        style={{ outline: series ? `1px solid ${series.color}` : 'none', outlineOffset: '1px' }}
+                        className="w-8 h-12 md:w-10 md:h-15 rounded-sm overflow-hidden border border-black/20 shadow-sm cursor-pointer hover:scale-105 transition-transform relative group"
                       >
                         <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" loading="lazy" />
-                        <div className="absolute inset-0 bg-accent/20 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-0.5 md:gap-1">
-                          {entriesToday.length > 0 && (
-                            <div className="bg-accent text-bg text-[6px] md:text-[8px] font-bold px-0.5 md:px-1 rounded-full">
-                              {entriesToday.length}
-                            </div>
-                          )}
-                          {isFinishedToday && <CheckCircle2 className="w-3 h-3 md:w-4 md:h-4 text-white" />}
-                        </div>
-                        {series && (
-                          <div 
-                            className="absolute bottom-0 left-0 right-0 h-0.5 md:h-1" 
-                            style={{ backgroundColor: series.color }}
-                          />
+                        {entriesToday.length > 0 && (
+                          <div className="absolute top-0 right-0 bg-accent w-2 h-2 rounded-full border border-bg" />
                         )}
                       </div>
                     );
@@ -991,97 +1268,149 @@ export default function App() {
     );
   };
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isDraggingScroll, setIsDraggingScroll] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollRef.current) return;
+    setIsDraggingScroll(true);
+    setStartX(e.pageX - scrollRef.current.offsetLeft);
+    setScrollLeft(scrollRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDraggingScroll(false);
+  };
+
+  const handleMouseUp = () => {
+    setIsDraggingScroll(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingScroll || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const walk = (x - startX) * 2; // Scroll speed
+    scrollRef.current.scrollLeft = scrollLeft - walk;
+  };
+
+  const recentScrollRef = useRef<HTMLDivElement>(null);
+  const [isDraggingRecent, setIsDraggingRecent] = useState(false);
+  const [startRecentX, setStartRecentX] = useState(0);
+  const [scrollRecentLeft, setScrollRecentLeft] = useState(0);
+
+  const handleRecentMouseDown = (e: React.MouseEvent) => {
+    if (!recentScrollRef.current) return;
+    setIsDraggingRecent(true);
+    setStartRecentX(e.pageX - recentScrollRef.current.offsetLeft);
+    setScrollRecentLeft(recentScrollRef.current.scrollLeft);
+  };
+
+  const handleRecentMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingRecent || !recentScrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - recentScrollRef.current.offsetLeft;
+    const walk = (x - startRecentX) * 2;
+    recentScrollRef.current.scrollLeft = scrollRecentLeft - walk;
+  };
+
   return (
-    <div className="min-h-screen bg-bg selection:bg-accent/30 flex flex-col">
-      {/* Hero Section */}
-      <section className="relative pt-12 md:pt-20 pb-8 md:pb-12 px-6 overflow-hidden">
+    <div className="min-h-screen bg-[#121212] selection:bg-accent/30 flex flex-col pb-24 md:pb-0">
+      {/* Compact Header for Mobile */}
+      <header className={`sticky top-0 z-40 bg-[#121212]/95 backdrop-blur-2xl md:hidden px-6 py-4 flex flex-col gap-0.5 border-b border-white/5 ${viewingSeriesId ? 'hidden' : ''}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center">
+              <Library className="w-2.5 h-2.5 text-accent" />
+            </div>
+            <span className="text-[9px] font-bold text-accent uppercase tracking-widest">Your Library</span>
+          </div>
+          {user && (
+            <button onClick={() => setIsSettingsModalOpen(true)} className="p-1 text-text-muted hover:text-white">
+              <Settings2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+        <h1 className="text-2xl font-black text-white tracking-tight">
+          {viewingSeriesId ? seriesList.find(s => s.id === viewingSeriesId)?.title : 
+           activeTab === "collections" ? "Your Library" : 
+           activeTab === "calendar" ? "Reading Log" : 
+           activeTab === "dragons" ? "Dragon Books" : "Wishlist"}
+        </h1>
+        {user && !viewingSeriesId && (
+          <p className="text-[10px] text-text-muted font-medium">Welcome back, {user.displayName?.split(' ')[0]}</p>
+        )}
+      </header>
+
+      {/* Hero Section - Hidden on mobile, shown on desktop */}
+      <section className="hidden md:block relative pt-12 pb-8 px-6 overflow-hidden">
         <div className="max-w-6xl mx-auto relative z-10">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 md:gap-12">
-            <div className="space-y-4 md:space-y-6 flex-1">
-              <div className="flex items-center gap-6 mb-2">
-                <span className="font-sans text-[10px] md:text-xs uppercase tracking-[0.2em] text-accent font-bold">
-                  {activeTab === "collections" ? "Your Library" : activeTab === "calendar" ? "Reading Log" : "Wishlist"}
-                </span>
-                <div className="h-px flex-1 bg-border/40" />
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl md:text-6xl font-serif font-black text-accent">{finishedCount}</span>
-                  <span className="text-[8px] md:text-[10px] uppercase tracking-widest opacity-40">Finished Books</span>
-                </div>
-              </div>
-              <h1 className="text-5xl md:text-8xl font-serif font-black tracking-tight text-white leading-tight">
-                {activeTab === "collections" ? (
-                  <>Reading <br /><span className="italic text-accent">Collections</span></>
-                ) : activeTab === "calendar" ? (
-                  <>Reading <br /><span className="italic text-accent">Calendar</span></>
-                ) : activeTab === "dragons" ? (
-                  <>Dragon <br /><span className="italic text-accent">Books</span></>
-                ) : (
-                  <>Book <br /><span className="italic text-accent">Wishlist</span></>
-                )}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+            <div className="space-y-2 flex-1">
+              <h1 className="text-6xl font-black tracking-tighter text-white leading-tight">
+                {activeTab === "collections" ? "Your Library" : 
+                 activeTab === "calendar" ? "Reading Log" :
+                 activeTab === "dragons" ? "Dragon Books" : "Wishlist"}
               </h1>
+              <p className="text-text-muted font-medium">
+                {user ? `Welcome back, ${user.displayName?.split(' ')[0]}` : 'Track your reading journey'}
+              </p>
             </div>
             
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-8 flex-shrink-0">
-              {user ? (
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-bold text-white uppercase tracking-widest">{user.displayName}</span>
-                    <button onClick={logOut} className="text-[8px] text-text-muted hover:text-red-400 uppercase tracking-widest font-bold flex items-center gap-1">
-                      <LogOut className="w-3 h-3" /> Sign Out
-                    </button>
-                    <button onClick={() => setIsSettingsModalOpen(true)} className="text-[8px] text-text-muted hover:text-accent uppercase tracking-widest font-bold flex items-center gap-1 mt-1">
-                      <Settings2 className="w-3 h-3" /> Settings
-                    </button>
-                  </div>
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt="Profile" className="w-10 h-10 rounded-full border border-border" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-surface border border-border flex items-center justify-center">
-                      <UserIcon className="w-5 h-5 text-text-muted" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-end gap-2">
-                  <button 
-                    onClick={handleLogin}
-                    className="flex items-center gap-3 px-6 py-3 rounded-full bg-white text-bg hover:bg-accent hover:text-white transition-all font-bold text-[10px] uppercase tracking-widest"
-                  >
-                    <LogIn className="w-4 h-4" /> Sign In with Google
-                  </button>
-                  {authError && (
-                    <div className="max-w-xs p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[10px] text-red-400 font-medium leading-relaxed">
-                      {authError}
-                    </div>
-                  )}
-                </div>
-              )}
-              
-              {activeTab === "collections" && user && (
+            <div className="flex items-center gap-6 flex-shrink-0">
+              {user && activeTab === "collections" && (
                 <button 
                   onClick={() => {
                     setEditingSeries(null);
                     setNewSeries({ title: "", description: "", color: "#e6a8d7" });
                     setIsSeriesModalOpen(true);
                   }}
-                  className="group flex items-center gap-4 h-14 md:h-20 px-6 md:px-8 rounded-full border border-accent text-accent hover:bg-accent hover:text-bg transition-all duration-500"
+                  className="flex items-center gap-2 px-8 py-4 bg-accent text-black rounded-full font-bold hover:scale-105 transition-all"
                 >
-                  <Plus className="w-5 h-5 md:w-8 md:h-8" />
-                  <span className="text-[10px] md:text-xs font-bold uppercase tracking-[0.2em]">
-                    New Collection
-                  </span>
+                  <Plus className="w-6 h-6" />
+                  New Collection
                 </button>
+              )}
+              
+              {user && (
+                <div className="flex items-center gap-3 pl-6 border-l border-white/10">
+                  <div className="flex flex-col items-end">
+                    <span className="text-[10px] font-bold text-white uppercase tracking-widest">{user.displayName}</span>
+                    <button onClick={logOut} className="text-[8px] text-text-muted hover:text-red-400 uppercase tracking-widest font-bold">Sign Out</button>
+                  </div>
+                  <img src={user.photoURL || ""} alt="Profile" className="w-10 h-10 rounded-full border border-white/10" />
+                </div>
               )}
             </div>
           </div>
         </div>
-        
-        {/* Atmospheric background elements */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 blur-[120px] rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-accent/5 blur-[100px] rounded-full translate-y-1/2 -translate-x-1/2" />
       </section>
 
-      <main className="max-w-6xl mx-auto px-6 pb-32 flex-1 w-full">
+      {/* Desktop Tabs */}
+      <div className="hidden md:flex max-w-6xl mx-auto px-6 mb-8 gap-10 border-b border-white/5">
+        {[
+          { id: "collections", label: "Library", icon: Library },
+          { id: "calendar", label: "Reading Log", icon: CalendarIcon },
+          { id: "wishlist", label: "Wishlist", icon: ShoppingBag },
+          { id: "dragons", label: "Dragons", icon: Flame },
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as Tab)}
+            className={`flex items-center gap-3 pb-5 text-sm font-bold transition-all relative ${activeTab === tab.id ? 'text-white' : 'text-text-muted hover:text-white'}`}
+          >
+            <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-accent' : ''}`} />
+            {tab.label}
+            {activeTab === tab.id && (
+              <motion.div layoutId="activeTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      <main className="max-w-6xl mx-auto px-6 pb-12 flex-1 w-full mt-6 md:mt-0">
         <AnimatePresence mode="wait">
           {!user ? (
             <motion.div 
@@ -1119,140 +1448,341 @@ export default function App() {
               transition={{ duration: 0.2 }}
             >
               {activeTab === "collections" && (
-                <div className="space-y-12">
-                  {seriesList.map((series, sIdx) => {
-                    const seriesBooks = ownedBooks.filter(b => b.seriesId === series.id);
-                    const totalPages = seriesBooks.reduce((acc, b) => acc + b.totalPages, 0);
-                    const currentPages = seriesBooks.reduce((acc, b) => acc + b.currentPage, 0);
-                    const finishedInSeries = seriesBooks.filter(b => b.currentPage >= b.totalPages && b.totalPages > 0).length;
-                    const progress = totalPages > 0 ? (currentPages / totalPages) * 100 : 0;
+                <div className="space-y-8">
+                  {viewingSeriesId ? (
+                    <div className="space-y-4">
+                      {/* Series Detail View (Spotify Style) */}
+                      {seriesList.find(s => s.id === viewingSeriesId) && (() => {
+                        const series = seriesList.find(s => s.id === viewingSeriesId)!;
+                        const seriesBooks = books.filter(b => b.seriesId === series.id).sort((a, b) => (a.priority || 0) - (b.priority || 0));
+                        const totalPages = seriesBooks.reduce((acc, b) => acc + b.totalPages, 0);
+                        const currentPages = seriesBooks.reduce((acc, b) => acc + b.currentPage, 0);
+                        const progress = totalPages > 0 ? (currentPages / totalPages) * 100 : 0;
 
-                    return (
-                      <div key={`${series.id}-${sIdx}`} className="group">
-                        <div className="flex items-center justify-between mb-6">
-                          <div className="space-y-1">
-                            <h2 className="text-3xl font-serif font-bold text-white group-hover:text-accent transition-colors">
-                              {series.title}
-                            </h2>
-                            <p className="text-text-muted text-sm font-medium tracking-wide uppercase text-[10px]">
-                              {seriesBooks.length} Books • {currentPages} / {totalPages} Pages Read
-                            </p>
-                          </div>
-                          <div className="flex gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                            <button 
-                              onClick={() => {
-                                setEditingSeries(series);
-                                setNewSeries({ title: series.title, description: series.description || "", color: series.color || "#e6a8d7" });
-                                setIsSeriesModalOpen(true);
+                        return (
+                          <div className="space-y-6 -mx-6 -mt-6">
+                            {/* Spotify Header Style with Dynamic Gradient */}
+                            <div 
+                              className="relative pt-20 pb-8 px-6 flex flex-col items-center text-center md:flex-row md:items-end md:text-left gap-6 transition-colors duration-500"
+                              style={{ 
+                                background: `linear-gradient(to bottom, ${series.color || '#1DB954'}cc, #121212)` 
                               }}
-                              className="p-2 text-text-muted hover:text-accent transition-colors"
                             >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => deleteSeries(series.id)}
-                              className="p-2 text-text-muted hover:text-red-400 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
+                              {/* Floating Back Button - Sticky behavior handled by scrollY */}
+                              <button 
+                                onClick={() => setViewingSeriesId(null)}
+                                className={`fixed left-6 w-8 h-8 rounded-full flex items-center justify-center text-white transition-all z-[60] md:absolute ${scrollY > 200 ? 'top-3 bg-transparent' : 'top-8 bg-black/20 hover:bg-black/40'} ${currentBookDetail ? 'hidden' : ''}`}
+                              >
+                                <ChevronLeft className="w-5 h-5" />
+                              </button>
 
-                        {/* Pill Progress Bar with Stacking Covers */}
-                        <div className="pill-progress-bg group/progress cursor-pointer relative" onClick={() => setSelectedSeriesId(selectedSeriesId === series.id ? null : series.id)}>
-                          <motion.div 
-                            initial={{ width: 0 }}
-                            animate={{ width: `${progress}%` }}
-                            className="pill-progress-fill"
-                            style={{ backgroundColor: series.color }}
-                          />
-                          
-                          {/* Book Cover Stacking */}
-                          <div className="absolute inset-0 flex items-center px-4 gap-[-12px]">
-                            <div className="flex -space-x-3">
-                              {seriesBooks.slice(0, 5).map((book, idx) => (
-                                <motion.div
-                                  key={`${book.id}-pill-${idx}`}
-                                  initial={{ x: -20, opacity: 0 }}
-                                  animate={{ x: 0, opacity: 1 }}
-                                  transition={{ delay: idx * 0.1 }}
-                                  className="w-8 h-10 rounded-sm overflow-hidden border border-bg shadow-lg relative"
-                                  style={{ zIndex: 10 - idx }}
+                              {/* Sticky Title Bar for Mobile */}
+                              <AnimatePresence>
+                                {scrollY > 200 && (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="fixed top-0 left-0 right-0 h-14 flex items-center justify-center px-16 z-50 md:hidden shadow-2xl"
+                                    style={{ 
+                                      background: `linear-gradient(to bottom, ${series.color || '#121212'}cc, #121212)` 
+                                    }}
+                                  >
+                                    <div className="absolute inset-0 backdrop-blur-xl" />
+                                    <h2 className="relative z-10 text-sm font-black text-white truncate">{series.title}</h2>
+                                  </motion.div>
+                                )}
+                              </AnimatePresence>
+
+                              <motion.div 
+                                style={{ 
+                                  opacity: Math.max(0, 1 - scrollY / 250),
+                                  scale: Math.max(0.7, 1 - scrollY / 1000)
+                                }}
+                                className="w-44 md:w-52 aspect-square rounded-lg bg-surface-hover shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden relative group shrink-0"
+                              >
+                                {series.coverUrl ? (
+                                  <img src={series.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                ) : (
+                                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-text-muted">
+                                    <Library className="w-12 h-12 opacity-20" />
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">No Cover</span>
+                                  </div>
+                                )}
+                              </motion.div>
+
+                              <motion.div 
+                                style={{ opacity: Math.max(0, 1 - scrollY / 300) }}
+                                className="flex-1 space-y-3"
+                              >
+                                <div className="space-y-1">
+                                  <span className="text-[10px] font-bold text-white uppercase tracking-tight">Collection</span>
+                                  <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter leading-none">{series.title}</h2>
+                                </div>
+                                <div className="flex items-center justify-center md:justify-start gap-2 text-[11px] font-bold text-text-muted">
+                                  <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden shrink-0">
+                                     {user?.photoURL ? <img src={user.photoURL} className="w-full h-full object-cover" /> : <UserIcon className="w-3 h-3 text-accent" />}
+                                  </div>
+                                  <span className="text-white hover:underline cursor-pointer">{user?.displayName}</span>
+                                  <span>•</span>
+                                  <span className="text-white">{seriesBooks.length} books</span>
+                                  <span>•</span>
+                                  <span>{Math.round(progress)}% read</span>
+                                </div>
+                              </motion.div>
+                            </div>
+
+                            {/* Action Bar */}
+                            <div className="flex items-center justify-between py-2 px-2">
+                              <div className="flex items-center gap-6">
+                                <button className="w-12 h-12 rounded-full bg-accent text-bg flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all">
+                                  <ArrowRight className="w-6 h-6 fill-current" />
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    setEditingSeries(series);
+                                    setNewSeries({ title: series.title, description: series.description || "", color: series.color || "#e6a8d7", coverUrl: series.coverUrl || "" });
+                                    setIsSeriesModalOpen(true);
+                                  }}
+                                  className="text-text-muted hover:text-white transition-colors"
+                                  title="Edit Collection"
                                 >
-                                  <img 
-                                    src={book.coverUrl} 
-                                    alt={book.title} 
-                                    className={`w-full h-full object-cover ${book.currentPage >= book.totalPages ? 'grayscale opacity-50' : ''}`}
-                                    referrerPolicy="no-referrer"
-                                  />
-                                </motion.div>
+                                  <MoreVertical className="w-6 h-6" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Books List Header */}
+                            <div className="px-6 py-2 border-b border-white/5 grid grid-cols-[44px_1fr_48px] gap-4 text-[10px] font-bold text-text-muted uppercase tracking-widest">
+                              <div className="text-center">#</div>
+                              <div>Title</div>
+                              <div className="text-right"><Clock className="w-3 h-3 ml-auto" /></div>
+                            </div>
+
+                            {/* Books List */}
+                            <div className="space-y-1">
+                              <DndContext 
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd}
+                              >
+                                <SortableContext 
+                                  items={seriesBooks.map(b => b.id)}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  {seriesBooks.map((book, idx) => (
+                                    <SortableBookItem
+                                      key={book.id}
+                                      book={book}
+                                      idx={idx}
+                                      onClick={() => setSelectedBookForDetail(book)}
+                                      onMore={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedBookForDetail(book);
+                                      }}
+                                    />
+                                  ))}
+                                </SortableContext>
+                              </DndContext>
+                              <button 
+                                onClick={() => {
+                                  setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
+                                  setIsAddBookModalOpen(true);
+                                }}
+                                className="w-full flex items-center gap-3 p-2 px-6 rounded-md hover:bg-white/5 transition-colors group/add"
+                              >
+                                <div className="w-10 h-10 rounded-sm border border-dashed border-white/10 flex items-center justify-center text-text-muted group-hover/add:border-accent group-hover/add:text-accent transition-colors">
+                                  <Plus className="w-4 h-4" />
+                                </div>
+                                <span className="text-xs font-bold text-text-muted group-hover/add:text-white">Add Book</span>
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="space-y-10">
+                      {/* Filter Pills */}
+                      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                        {(["All", "Collections", "Wishlist", "Dragons"] as const).map((filter) => (
+                          <button 
+                            key={filter}
+                            onClick={() => setLibraryFilter(filter)}
+                            className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap ${libraryFilter === filter ? 'bg-accent text-bg' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                          >
+                            {filter}
+                          </button>
+                        ))}
+                      </div>
+
+                      {libraryFilter === "All" && (
+                        <div className="space-y-10">
+                          {/* Your recent series */}
+                          <section className="space-y-4">
+                            <h2 className="text-2xl font-black text-white tracking-tight">Your recent series</h2>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                              {seriesList.slice(0, 6).map((series) => (
+                                <SeriesCardHorizontal 
+                                  key={series.id} 
+                                  series={series} 
+                                  onClick={() => setViewingSeriesId(series.id)} 
+                                />
                               ))}
-                              {seriesBooks.length > 5 && (
-                                <div className="w-8 h-10 rounded-sm bg-surface border border-bg flex items-center justify-center text-[10px] font-bold text-text-muted">
-                                  +{seriesBooks.length - 5}
+                            </div>
+                          </section>
+
+                          {/* Made For You */}
+                          <section className="space-y-4">
+                            <h2 className="text-xl font-black text-white tracking-tight">Made For {user.displayName?.split(' ')[0]}</h2>
+                            <div 
+                              ref={scrollRef}
+                              onMouseDown={handleMouseDown}
+                              onMouseLeave={handleMouseLeave}
+                              onMouseUp={handleMouseUp}
+                              onMouseMove={handleMouseMove}
+                              className={`flex items-start gap-4 overflow-x-auto pb-4 spotify-scrollbar ${isDraggingScroll ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
+                            >
+                              {seriesList.map((series) => (
+                                <div key={series.id} className="shrink-0">
+                                  <SeriesCardSquare 
+                                    series={series} 
+                                    onClick={() => setViewingSeriesId(series.id)} 
+                                  />
+                                </div>
+                              ))}
+                              <div className="w-4 shrink-0" /> {/* Spacer for end of scroll */}
+                              {seriesList.length === 0 && (
+                                <div className="w-full py-12 text-center card border-dashed">
+                                  <Library className="w-12 h-12 text-accent/20 mx-auto mb-4" />
+                                  <p className="text-xs text-text-muted">No collections yet</p>
                                 </div>
                               )}
                             </div>
-                            
-                            <div className="ml-auto flex items-center gap-3 pr-2">
-                              <span className="text-xs font-bold tracking-tighter text-white drop-shadow-md">
-                                {Math.round(progress)}%
-                              </span>
-                              <ChevronRight className={`w-4 h-4 text-white transition-transform duration-300 ${selectedSeriesId === series.id ? 'rotate-90' : ''}`} />
+                          </section>
+
+                          {/* Recently Updated (Books) */}
+                          <section className="space-y-4">
+                            <h2 className="text-xl font-black text-white tracking-tight">Recently Updated</h2>
+                            <div 
+                              ref={recentScrollRef}
+                              onMouseDown={handleRecentMouseDown}
+                              onMouseLeave={() => setIsDraggingRecent(false)}
+                              onMouseUp={() => setIsDraggingRecent(false)}
+                              onMouseMove={handleRecentMouseMove}
+                              className={`flex items-start gap-4 overflow-x-auto pb-4 spotify-scrollbar ${isDraggingRecent ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
+                            >
+                              {ownedBooks.slice(0, 10).map((book) => (
+                                <div 
+                                  key={book.id}
+                                  onClick={() => !isDraggingRecent && setSelectedBookForDetail(book)}
+                                  className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-32 shrink-0"
+                                >
+                                  <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
+                                    <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    <h3 className="text-[11px] font-bold text-white truncate">{book.title}</h3>
+                                    <p className="text-[9px] text-text-muted truncate">{book.author}</p>
+                                  </div>
+                                </div>
+                              ))}
+                              <div className="w-4 shrink-0" /> {/* Spacer for end of scroll */}
                             </div>
+                          </section>
+                        </div>
+                      )}
+
+                      {libraryFilter === "Collections" && (
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between">
+                            <h2 className="text-2xl font-black text-white tracking-tight">All Collections</h2>
+                            <button 
+                              onClick={() => setIsSeriesModalOpen(true)}
+                              className="text-xs font-bold text-accent hover:underline"
+                            >
+                              + New Collection
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                            {seriesList.map((series) => (
+                              <SeriesCardHorizontal 
+                                key={series.id} 
+                                series={series} 
+                                onClick={() => setViewingSeriesId(series.id)} 
+                              />
+                            ))}
                           </div>
                         </div>
+                      )}
 
-                        {/* Books List (Expandable) */}
-                        <AnimatePresence>
-                          {selectedSeriesId === series.id && (
-                            <motion.div
-                              key={`series-books-${series.id}`}
-                              initial={{ height: 0, opacity: 0 }}
-                              animate={{ height: 'auto', opacity: 1 }}
-                              exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden"
+                      {libraryFilter === "Wishlist" && (
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between">
+                            <h2 className="text-2xl font-black text-white tracking-tight">Your Wishlist</h2>
+                            <button 
+                              onClick={() => {
+                                setNewBook({ ...newBook, isWishlist: true, isDragonBook: false, coverUrl: "" });
+                                setIsAddBookModalOpen(true);
+                              }}
+                              className="text-xs font-bold text-accent hover:underline"
                             >
-                              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4">
-                                {seriesBooks.map((book, index) => (
-                                  <BookCard
-                                    key={book.id}
-                                    book={book}
-                                    onClick={() => setSelectedBookForDetail(book)}
-                                    updateProgress={updateProgress}
-                                    onMove={(direction) => moveBook(book, direction, seriesBooks)}
-                                    isFirst={index === 0}
-                                    isLast={index === seriesBooks.length - 1}
-                                  />
-                                ))}
-                                <button 
-                                  onClick={() => {
-                                    setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
-                                    setIsAddBookModalOpen(true);
-                                  }}
-                                  className="border-2 border-dashed border-accent/30 rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-accent/60 hover:border-accent hover:text-accent hover:bg-accent/5 transition-all group/add"
-                                >
-                                  <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center group-hover/add:scale-110 transition-transform">
-                                    <Plus className="w-5 h-5 md:w-6 md:h-6" />
-                                  </div>
-                                  <span className="text-[9px] md:text-xs font-bold uppercase tracking-widest">Add Book</span>
-                                </button>
+                              + Add Book
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {wishlistBooks.map((book) => (
+                              <div 
+                                key={book.id}
+                                onClick={() => setSelectedBookForDetail(book)}
+                                className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group"
+                              >
+                                <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
+                                  <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h3 className="text-[11px] font-bold text-white truncate">{book.title}</h3>
+                                  <p className="text-[9px] text-text-muted truncate">{book.author}</p>
+                                </div>
                               </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    );
-                  })}
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
-                  {seriesList.length === 0 && (
-                    <div className="text-center py-32 card border-dashed">
-                      <Library className="w-16 h-16 text-accent/20 mx-auto mb-6" />
-                      <h3 className="text-2xl font-serif font-bold text-white mb-2">Your library is empty</h3>
-                      <p className="text-text-muted mb-8 max-w-sm mx-auto">Create your first collection to start tracking your reading journey.</p>
-                      <button onClick={() => setIsSeriesModalOpen(true)} className="btn-primary">
-                        Create Collection
-                      </button>
+                      {libraryFilter === "Dragons" && (
+                        <div className="space-y-6">
+                          <div className="flex items-center justify-between">
+                            <h2 className="text-2xl font-black text-white tracking-tight">Dragon Books</h2>
+                            <button 
+                              onClick={() => {
+                                setNewBook({ ...newBook, isWishlist: false, isDragonBook: true, coverUrl: "" });
+                                setIsAddBookModalOpen(true);
+                              }}
+                              className="text-xs font-bold text-accent hover:underline"
+                            >
+                              + Add Dragon Book
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {dragonBooks.map((book) => (
+                              <div 
+                                key={book.id}
+                                onClick={() => setSelectedBookForDetail(book)}
+                                className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group"
+                              >
+                                <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
+                                  <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                </div>
+                                <div className="space-y-0.5">
+                                  <h3 className="text-[11px] font-bold text-white truncate">{book.title}</h3>
+                                  <p className="text-[9px] text-text-muted truncate">{book.author}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1365,40 +1895,40 @@ export default function App() {
         </AnimatePresence>
       </main>
 
-
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 inset-x-0 bg-surface/80 backdrop-blur-xl border-t border-border px-6 py-4 z-40">
-        <div className="max-w-md mx-auto flex justify-between items-center">
-          <button 
-            onClick={() => setActiveTab("collections")}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === "collections" ? 'text-accent' : 'text-text-muted hover:text-white'}`}
-          >
-            <Library className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Library</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab("calendar")}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === "calendar" ? 'text-accent' : 'text-text-muted hover:text-white'}`}
-          >
-            <CalendarIcon className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Calendar</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab("wishlist")}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === "wishlist" ? 'text-accent' : 'text-text-muted hover:text-white'}`}
-          >
-            <Heart className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Wishlist</span>
-          </button>
-          <button 
-            onClick={() => setActiveTab("dragons")}
-            className={`flex flex-col items-center gap-1 transition-colors ${activeTab === "dragons" ? 'text-accent' : 'text-text-muted hover:text-white'}`}
-          >
-            <Flame className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Dragons</span>
-          </button>
+      {/* Spotify-like Bottom Navigation */}
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#121212]/95 backdrop-blur-2xl px-2 pt-2 pb-8 border-t border-white/5">
+        <div className="flex justify-around items-center max-w-md mx-auto">
+          {[
+            { id: "collections", label: "Home", icon: Library },
+            { id: "calendar", label: "Log", icon: CalendarIcon },
+            { id: "wishlist", label: "Wishlist", icon: ShoppingBag },
+            { id: "dragons", label: "Dragons", icon: Flame },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as Tab)}
+              className={`flex-1 flex flex-col items-center py-2 gap-1 transition-all active:scale-95 ${activeTab === tab.id ? 'text-white' : 'text-text-muted'}`}
+            >
+              <tab.icon className={`w-6 h-6 transition-all ${activeTab === tab.id ? 'text-accent fill-accent/20' : ''}`} />
+              <span className={`text-[9px] font-medium tracking-tight transition-all ${activeTab === tab.id ? 'opacity-100' : 'opacity-60'}`}>{tab.label}</span>
+            </button>
+          ))}
         </div>
       </nav>
+
+      {/* Mobile Floating Action Button */}
+      {activeTab === "collections" && user && !viewingSeriesId && (
+        <button 
+          onClick={() => {
+            setEditingSeries(null);
+            setNewSeries({ title: "", description: "", color: "#e6a8d7", coverUrl: "" });
+            setIsSeriesModalOpen(true);
+          }}
+          className="fixed bottom-28 right-6 z-40 w-16 h-16 rounded-full bg-accent text-bg shadow-2xl flex items-center justify-center md:hidden active:scale-90 transition-transform"
+        >
+          <Plus className="w-10 h-10" />
+        </button>
+      )}
 
       {/* Modals */}
       <AnimatePresence>
@@ -1586,24 +2116,24 @@ export default function App() {
                     </select>
                   </div>
 
-                  <div className="flex items-center justify-between p-3 md:p-4 rounded-2xl bg-surface border border-border group hover:border-accent/50 transition-all">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl transition-colors ${newBook.isDragonBook ? 'bg-accent/20 text-accent' : 'bg-bg text-text-muted'}`}>
-                        <Flame className="w-4 h-4 md:w-5 md:h-5" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-white">Dragon Book</span>
-                        <span className="text-[8px] text-text-muted uppercase tracking-widest">Special collection</span>
-                      </div>
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={() => setNewBook({...newBook, isDragonBook: !newBook.isDragonBook})}
-                      className={`w-10 h-5 md:w-12 md:h-6 rounded-full relative transition-colors ${newBook.isDragonBook ? 'bg-accent' : 'bg-bg'}`}
-                    >
-                      <div className={`absolute top-0.5 md:top-1 w-4 h-4 rounded-full bg-white transition-all shadow-sm ${newBook.isDragonBook ? 'left-5 md:left-7' : 'left-1'}`} />
-                    </button>
-                  </div>
+        <div className="flex items-center justify-between p-4 rounded-xl bg-[#242424] group hover:bg-[#2a2a2a] transition-all">
+          <div className="flex items-center gap-3">
+            <div className={`p-2 rounded-lg transition-colors ${newBook.isDragonBook ? 'bg-accent/20 text-accent' : 'bg-black/40 text-text-muted'}`}>
+              <Flame className="w-5 h-5" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-white">Dragon Book</span>
+              <span className="text-[10px] text-text-muted">Special collection</span>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => setNewBook({...newBook, isDragonBook: !newBook.isDragonBook})}
+            className={`w-10 h-5 rounded-full relative transition-colors ${newBook.isDragonBook ? 'bg-accent' : 'bg-black'}`}
+          >
+            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${newBook.isDragonBook ? 'left-5' : 'left-1'}`} />
+          </button>
+        </div>
                 </form>
               </div>
 
@@ -1623,7 +2153,7 @@ export default function App() {
         )}
 
         {isSeriesModalOpen && (
-          <div key="series-modal-container" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div key="series-modal-container" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSeriesModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
               <div className="flex justify-between items-center mb-8">
@@ -1631,6 +2161,25 @@ export default function App() {
                 <button onClick={() => setIsSeriesModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
               </div>
               <form onSubmit={handleSaveSeries} className="space-y-6">
+                <div 
+                  className="w-32 h-32 mx-auto rounded-2xl bg-surface-hover border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-all cursor-pointer overflow-hidden relative group"
+                  onClick={() => {
+                    setIsUploadingSeriesCover(false); // This is for the "New/Edit" modal, not the detail view
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  {newSeries.coverUrl ? (
+                    <img src={newSeries.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <>
+                      <Upload className="w-6 h-6" />
+                      <span className="text-[8px] font-bold uppercase tracking-widest">Cover</span>
+                    </>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Upload className="w-4 h-4 text-white" />
+                  </div>
+                </div>
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Collection Title</label>
                   <input required value={newSeries.title} onChange={e => setNewSeries({...newSeries, title: e.target.value})} className="input-field" placeholder="e.g. The Lord of the Rings" />
@@ -1640,12 +2189,20 @@ export default function App() {
                   <textarea value={newSeries.description} onChange={e => setNewSeries({...newSeries, description: e.target.value})} className="input-field h-24 resize-none" placeholder="Brief description of the saga..." />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Theme Color</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Theme Color</label>
+                    <input 
+                      type="color" 
+                      value={newSeries.color || "#1DB954"} 
+                      onChange={e => setNewSeries({...newSeries, color: e.target.value})}
+                      className="w-6 h-6 rounded-md bg-transparent border-none cursor-pointer"
+                    />
+                  </div>
                   <div className="flex flex-wrap gap-2 md:gap-3">
                     {[
-                      "#e6a8d7", "#a8e6cf", "#dcedc1", "#ffd3b6", "#ffaaa5", "#8fa39f",
-                      "#ff9ff3", "#feca57", "#ff6b6b", "#48dbfb", "#1dd1a1", "#5f27cd",
-                      "#54a0ff", "#00d2d3", "#576574", "#222f3e"
+                      "#1DB954", "#e91e63", "#9c27b0", "#673ab7", "#3f51b5", "#2196f3",
+                      "#00bcd4", "#009688", "#4caf50", "#8bc34a", "#cddc39", "#ffeb3b",
+                      "#ffc107", "#ff9800", "#ff5722", "#795548"
                     ].map(color => (
                       <button
                         key={color}
@@ -1724,6 +2281,49 @@ export default function App() {
               </div>
               
               <div className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 text-white">
+                    <Library className="w-5 h-5 text-accent" />
+                    <h4 className="font-bold uppercase tracking-widest text-xs">Manage Collections</h4>
+                  </div>
+                  
+                  <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 scrollbar-hide">
+                    {seriesList.map((series) => (
+                      <div key={`settings-series-${series.id}`} className="flex items-center justify-between p-4 rounded-xl bg-surface border border-white/5 group">
+                        <div className="flex items-center gap-3">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: series.color }} />
+                          <span className="text-sm font-bold text-white">{series.title}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button 
+                            onClick={() => {
+                              setEditingSeries(series);
+                              setNewSeries({ title: series.title, description: series.description || "", color: series.color || "#e6a8d7", coverUrl: series.coverUrl || "" });
+                              setIsSeriesModalOpen(true);
+                            }}
+                            className="p-2 text-text-muted hover:text-accent transition-colors"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to delete "${series.title}"? Books will be moved to standalone.`)) {
+                                deleteSeries(series.id);
+                              }
+                            }}
+                            className="p-2 text-text-muted hover:text-red-400 transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {seriesList.length === 0 && (
+                      <p className="text-xs text-text-muted italic text-center py-4">No collections found.</p>
+                    )}
+                  </div>
+                </div>
+
                 <div className="p-6 rounded-2xl bg-red-500/5 border border-red-500/20 space-y-4">
                   <div className="flex items-center gap-3 text-red-400">
                     <AlertTriangle className="w-5 h-5" />
@@ -1812,281 +2412,282 @@ export default function App() {
         )}
 
         {currentBookDetail && (
-          <div key="book-detail-modal-overlay" className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div key="book-detail-modal-overlay" className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }} 
               onClick={() => setSelectedBookForDetail(null)} 
-              className="absolute inset-0 bg-bg/90 backdrop-blur-xl" 
+              className="absolute inset-0 bg-black/95 backdrop-blur-xl" 
             />
             <motion.div 
               layoutId={currentBookDetail.id}
-              className="relative w-full max-w-2xl bg-surface border border-border rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+              className="relative w-full h-full md:h-auto md:max-w-2xl bg-[#121212] md:rounded-3xl shadow-2xl overflow-y-auto flex flex-col max-h-screen md:max-h-[90vh] scrollbar-hide"
             >
-              <div className="p-8 border-b border-border flex justify-between items-start">
-                <div className="flex gap-6">
-                  <div className="w-24 h-36 rounded-lg overflow-hidden border border-border shadow-md flex-shrink-0">
+              {/* Spotify-style Header */}
+              <div 
+                className="relative pt-16 pb-8 px-6 flex flex-col items-center text-center gap-6 shrink-0"
+                style={{ 
+                  background: `linear-gradient(to bottom, ${seriesList.find(s => s.id === currentBookDetail.seriesId)?.color || '#1DB954'}44, #121212)` 
+                }}
+              >
+                <button 
+                  onClick={() => setSelectedBookForDetail(null)} 
+                  className="fixed md:absolute top-6 left-6 p-2 text-white/70 hover:text-white transition-colors z-[70]"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+
+                <div className="relative group">
+                  <div className="w-48 md:w-56 aspect-[2/3] rounded-lg overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex-shrink-0">
                     <img src={currentBookDetail.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-serif font-bold text-white mb-1">{currentBookDetail.title}</h3>
-                    <p className="text-text-muted italic mb-2">{currentBookDetail.author}</p>
-                    <div className="mb-4">
-                      <StarRating 
-                        rating={currentBookDetail.rating || 0} 
-                        onRate={async (r) => {
-                          try {
-                            await updateDoc(doc(db, "books", currentBookDetail.id), { rating: r });
-                            // The onSnapshot listener will update the books list, but we update local state for immediate feedback
-                            setSelectedBookForDetail(prev => prev ? { ...prev, rating: r } : null);
-                          } catch (error) {
-                            handleFirestoreError(error, OperationType.UPDATE, "books");
-                          }
-                        }} 
-                        size="md"
-                      />
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <ProgressInput 
-                        bookId={currentBookDetail.id}
-                        currentPage={currentBookDetail.currentPage}
-                        totalPages={currentBookDetail.totalPages}
-                        onUpdate={updateProgress}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {!isEditingBookDetail ? (
-                    <button 
-                      onClick={() => {
-                        setEditedBook(currentBookDetail);
-                        setIsEditingBookDetail(true);
-                      }}
-                      className="p-2 text-text-muted hover:text-accent transition-colors"
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={handleUpdateBook}
-                      disabled={isSaving}
-                      className="p-2 text-accent hover:text-accent/80 transition-colors"
-                    >
-                      {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
-                    </button>
-                  )}
                   <button 
                     onClick={() => {
-                      setSelectedBookForDetail(null);
-                      setIsEditingBookDetail(false);
-                    }} 
-                    className="p-2 text-text-muted hover:text-white transition-colors"
+                      setEditedBook(currentBookDetail);
+                      setIsEditingBookDetail(true);
+                      setTimeout(() => fileInputRef.current?.click(), 100);
+                    }}
+                    className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all shadow-xl"
                   >
-                    <X className="w-6 h-6" />
+                    <Edit3 className="w-5 h-5" />
                   </button>
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-3xl font-black text-white tracking-tighter leading-tight">{currentBookDetail.title}</h3>
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden shrink-0">
+                      {user?.photoURL ? <img src={user.photoURL} className="w-full h-full object-cover" /> : <UserIcon className="w-3 h-3 text-accent" />}
+                    </div>
+                    <p className="text-white font-bold text-sm">{currentBookDetail.author}</p>
+                  </div>
+                  <div className="flex justify-center pt-1">
+                    <StarRating 
+                      rating={currentBookDetail.rating || 0} 
+                      onRate={async (r) => {
+                        try {
+                          await updateDoc(doc(db, "books", currentBookDetail.id), { rating: r });
+                        } catch (error) {
+                          handleFirestoreError(error, OperationType.UPDATE, "books");
+                        }
+                      }} 
+                      size="sm"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-8 space-y-8 scrollbar-hide">
-                {isEditingBookDetail && editedBook ? (
-                  <div className="space-y-6">
-                    <div className="flex gap-6 items-start">
-                      <div 
-                        onClick={() => fileInputRef.current?.click()}
-                        className="group relative w-24 h-36 rounded-lg overflow-hidden border-2 border-dashed border-border hover:border-accent transition-all cursor-pointer bg-bg/50 flex flex-col items-center justify-center gap-2 shadow-inner flex-shrink-0"
-                      >
-                        {editedBook.coverUrl ? (
-                          <>
-                            <img src={editedBook.coverUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                              <Upload className="w-5 h-5 text-white" />
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <ImageIcon className="w-6 h-6 text-text-muted group-hover:text-accent transition-colors" />
-                            <span className="text-[8px] font-bold uppercase tracking-widest text-text-muted group-hover:text-accent">Upload</span>
-                          </>
-                        )}
-                      </div>
-                      <div className="flex-1 space-y-4">
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
-                          <input 
-                            value={editedBook.title} 
-                            onChange={e => setEditedBook({...editedBook, title: e.target.value})} 
-                            className="input-field text-sm" 
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Author</label>
-                          <input 
-                            value={editedBook.author} 
-                            onChange={e => setEditedBook({...editedBook, author: e.target.value})} 
-                            className="input-field text-sm" 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Current Page</label>
-                        <input 
-                          type="number"
-                          value={editedBook.currentPage} 
-                          onChange={e => setEditedBook({...editedBook, currentPage: parseInt(e.target.value) || 0})} 
-                          className="input-field text-sm" 
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Total Pages</label>
-                        <input 
-                          type="number"
-                          value={editedBook.totalPages} 
-                          onChange={e => setEditedBook({...editedBook, totalPages: parseInt(e.target.value) || 0})} 
-                          className="input-field text-sm" 
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Collection</label>
-                      <select 
-                        value={editedBook.seriesId || ""} 
-                        onChange={e => setEditedBook({...editedBook, seriesId: e.target.value})} 
-                        className="input-field text-sm"
-                      >
-                        <option value="">No Collection</option>
-                        {seriesList.map(s => (
-                          <option key={s.id} value={s.id}>{s.title}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Rating</label>
-                      <StarRating 
-                        rating={editedBook.rating || 0} 
-                        onRate={(r) => setEditedBook({...editedBook, rating: r})} 
-                        size="md"
-                      />
-                    </div>
-                    <div className="flex gap-3 pt-4">
+              <div className="px-6 pb-24 space-y-8">
+                {/* Action Row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-6">
+                    {!currentBookDetail.isWishlist && (
                       <button 
-                        onClick={handleUpdateBook}
-                        disabled={isSaving}
-                        className="flex-1 btn-primary flex items-center justify-center gap-2"
+                        onClick={() => setIsAddChapterModalOpen(true)}
+                        className="w-14 h-14 rounded-full bg-accent text-bg flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
                       >
-                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-                        Save Changes
+                        <Plus className="w-7 h-7" />
                       </button>
+                    )}
+                    {currentBookDetail.isWishlist && (
                       <button 
-                        onClick={() => setIsEditingBookDetail(false)}
-                        className="px-6 py-3 rounded-xl bg-surface border border-border text-text-muted hover:text-white transition-all font-bold text-xs uppercase tracking-widest"
+                        onClick={() => {
+                          setBookToMove(currentBookDetail);
+                          setIsSelectSeriesModalOpen(true);
+                          setSelectedBookForDetail(null);
+                        }}
+                        className="w-14 h-14 rounded-full bg-green-500 text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
                       >
-                        Cancel
+                        <CheckCircle2 className="w-7 h-7" />
                       </button>
-                    </div>
+                    )}
+                    <button 
+                      onClick={() => setIsEditingBookDetail(true)}
+                      className="text-text-muted hover:text-white transition-colors"
+                    >
+                      <Settings2 className="w-6 h-6" />
+                    </button>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex gap-4">
-                  {currentBookDetail.isWishlist ? (
-                    <button 
-                      onClick={() => {
-                        setBookToMove(currentBookDetail);
-                        setIsSelectSeriesModalOpen(true);
-                        setSelectedBookForDetail(null);
-                      }}
-                      className="flex-1 btn-primary flex items-center justify-center gap-2 bg-green-500 hover:bg-green-600 border-green-500/20"
-                    >
-                      <CheckCircle2 className="w-4 h-4" /> Mark as Bought
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={() => setIsAddChapterModalOpen(true)}
-                      className="flex-1 btn-primary flex items-center justify-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" /> Add Chapter
-                    </button>
-                  )}
                   <button 
                     onClick={() => deleteBook(currentBookDetail.id)}
-                    className="px-6 py-3 rounded-xl bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500 hover:text-white transition-all font-bold text-xs uppercase tracking-widest"
+                    className="text-red-500/70 hover:text-red-500 transition-colors"
                   >
-                    Delete
+                    <Trash2 className="w-6 h-6" />
                   </button>
                 </div>
 
+                {/* Progress Section */}
+                <div className="bg-surface/30 rounded-2xl p-6 space-y-4">
+                  <div className="flex justify-between items-end">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Reading Progress</span>
+                      <p className="text-2xl font-black text-white">{Math.round((currentBookDetail.currentPage / currentBookDetail.totalPages) * 100)}%</p>
+                    </div>
+                    <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest">{currentBookDetail.currentPage} / {currentBookDetail.totalPages} pages</p>
+                  </div>
+                  <ProgressInput 
+                    bookId={currentBookDetail.id}
+                    currentPage={currentBookDetail.currentPage}
+                    totalPages={currentBookDetail.totalPages}
+                    onUpdate={updateProgress}
+                  />
+                </div>
+
+                {/* Chapters Section */}
                 <div className="space-y-6">
-                  <h4 className="text-[10px] uppercase tracking-[0.2em] text-accent font-black">Chapters & Notes</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-lg font-black text-white tracking-tight">Chapters & Notes</h4>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">{currentBookDetail.chapters?.length || 0} entries</span>
+                  </div>
+                  
                   {currentBookDetail.chapters && currentBookDetail.chapters.length > 0 ? (
-                    <div className="space-y-4">
+                    <div className="space-y-2">
                       {currentBookDetail.chapters.map((chapter, idx) => (
                         <div 
                           key={`chapter-item-${chapter.id}-${idx}`}
-                          className="bg-bg/50 p-6 rounded-2xl border border-border space-y-4"
+                          className="group flex items-start gap-4 p-4 rounded-xl hover:bg-white/5 transition-all cursor-default"
                         >
-                          <div className="flex justify-between items-center">
-                            <h5 className="font-serif font-bold text-white">
-                              {idx + 1}. {chapter.title}
-                            </h5>
-                            <button 
-                              onClick={() => deleteChapter(currentBookDetail.id, chapter.id)}
-                              className="text-text-muted hover:text-red-400 transition-colors"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                          <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-[10px] font-bold text-text-muted shrink-0">
+                            {idx + 1}
                           </div>
-                          {chapter.notes && (
-                            <p className="text-sm text-text-muted leading-relaxed whitespace-pre-wrap">
-                              {chapter.notes}
-                            </p>
-                          )}
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <h5 className="text-sm font-bold text-white truncate">{chapter.title}</h5>
+                            <p className="text-xs text-text-muted line-clamp-2 leading-relaxed">{chapter.notes}</p>
+                            <span className="text-[9px] text-text-muted/50 font-medium">{new Date(chapter.timestamp).toLocaleDateString()}</span>
+                          </div>
+                          <button 
+                            onClick={() => deleteChapter(currentBookDetail.id, chapter.id)}
+                            className="p-2 text-text-muted opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-12 border-2 border-dashed border-border rounded-2xl text-text-muted">
-                      <BookOpen className="w-8 h-8 mx-auto mb-3 opacity-20" />
-                      <p className="text-xs uppercase tracking-widest font-bold">No chapters yet</p>
+                    <div className="py-12 flex flex-col items-center justify-center gap-4 text-text-muted border-2 border-dashed border-white/5 rounded-3xl">
+                      <BookOpen className="w-10 h-10 opacity-20" />
+                      <p className="text-xs font-bold uppercase tracking-widest opacity-50">No chapters recorded</p>
                     </div>
                   )}
                 </div>
-              </>
-            )}
+              </div>
+
+              {/* Edit Mode Overlay */}
+              <AnimatePresence>
+                {isEditingBookDetail && editedBook && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: '100%' }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: '100%' }}
+                    className="absolute inset-0 bg-[#121212] z-50 flex flex-col"
+                  >
+                    <div className="p-6 border-b border-white/5 flex justify-between items-center bg-surface/30 backdrop-blur-md">
+                      <h3 className="text-xl font-black text-white tracking-tight">Edit Book</h3>
+                      <button onClick={() => setIsEditingBookDetail(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
+                      <div className="flex gap-6 items-start">
+                        <div 
+                          onClick={() => fileInputRef.current?.click()}
+                          className="group relative w-24 h-36 rounded-lg overflow-hidden border-2 border-dashed border-border hover:border-accent transition-all cursor-pointer bg-bg/50 flex flex-col items-center justify-center gap-2 shadow-inner flex-shrink-0"
+                        >
+                          {editedBook.coverUrl ? (
+                            <>
+                              <img src={editedBook.coverUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
+                                <Upload className="w-5 h-5 text-white" />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <ImageIcon className="w-6 h-6 text-text-muted group-hover:text-accent transition-colors" />
+                              <span className="text-[8px] font-bold uppercase tracking-widest text-text-muted group-hover:text-accent">Upload</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
+                            <input value={editedBook.title} onChange={e => setEditedBook({...editedBook, title: e.target.value})} className="input-field text-sm" />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Author</label>
+                            <input value={editedBook.author} onChange={e => setEditedBook({...editedBook, author: e.target.value})} className="input-field text-sm" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Current Page</label>
+                          <input type="number" value={editedBook.currentPage} onChange={e => setEditedBook({...editedBook, currentPage: parseInt(e.target.value) || 0})} className="input-field text-sm" />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Total Pages</label>
+                          <input type="number" value={editedBook.totalPages} onChange={e => setEditedBook({...editedBook, totalPages: parseInt(e.target.value) || 0})} className="input-field text-sm" />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Collection</label>
+                        <select value={editedBook.seriesId || ""} onChange={e => setEditedBook({...editedBook, seriesId: e.target.value})} className="input-field text-sm">
+                          <option value="">No Collection</option>
+                          {seriesList.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="p-6 border-t border-white/5 bg-surface/30 backdrop-blur-md">
+                      <button 
+                        onClick={handleUpdateBook}
+                        disabled={isSaving}
+                        className="w-full py-4 bg-accent text-bg rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:opacity-90 transition-all shadow-xl shadow-accent/20 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                      >
+                        {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Save Changes
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
           </div>
-        </motion.div>
-      </div>
-    )}
+        )}
 
         {isScanning && (
           <div key="scanning-modal-container" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsScanning(false)} className="absolute inset-0 bg-bg/90 backdrop-blur-xl" />
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative w-full max-w-md card p-8">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative w-full max-w-md bg-surface border border-white/10 rounded-[32px] p-8 shadow-2xl overflow-hidden">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-serif font-bold text-white">Scan Barcode</h3>
-                <button onClick={() => setIsScanning(false)} className="p-2 text-text-muted hover:text-white transition-colors"><X className="w-5 h-5" /></button>
+                <div className="space-y-1">
+                  <h3 className="text-2xl font-serif font-bold text-white">Scan Barcode</h3>
+                  <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold">Point your camera at the barcode</p>
+                </div>
+                <button onClick={() => setIsScanning(false)} className="p-2 text-text-muted hover:text-white transition-colors"><X className="w-6 h-6" /></button>
               </div>
-              <BarcodeScanner 
-                onScanSuccess={(isbn) => {
-                  console.log("Barcode scanned successfully:", isbn);
-                  fetchBookByISBN(isbn);
-                }}
-              />
-              <div className="grid grid-cols-2 gap-3 mt-6">
+              
+              <div className="rounded-2xl overflow-hidden border border-white/10 bg-black/40 relative aspect-video">
+                <BarcodeScanner 
+                  onScanSuccess={(isbn) => {
+                    console.log("Barcode scanned successfully:", isbn);
+                    fetchBookByISBN(isbn);
+                  }}
+                />
+                <div className="absolute inset-0 border-2 border-accent/30 pointer-events-none animate-pulse" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-8">
                 <button 
                   onClick={() => {
                     setIsScanning(false);
                     setIsAddBookModalOpen(true);
                   }}
-                  className="btn-primary py-4 text-[10px] uppercase tracking-widest font-bold"
+                  className="btn-secondary py-4 text-[10px] uppercase tracking-widest font-bold"
                 >
                   Manual Entry
                 </button>
                 <button 
                   onClick={() => setIsScanning(false)}
-                  className="btn-secondary py-4 text-[10px] uppercase tracking-widest font-bold"
+                  className="btn-primary py-4 text-[10px] uppercase tracking-widest font-bold"
                 >
                   Cancel
                 </button>
