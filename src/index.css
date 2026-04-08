@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400&family=Cinzel:wght@400;700;900&family=Lora:ital,wght@0,400;0,700;1,400&display=swap');
 @import "tailwindcss";
 
 @keyframes scan {
@@ -8,10 +8,10 @@
   100% { transform: translateY(90px); opacity: 0; }
 }
 
-@theme {
+:root {
+  /* OG Theme (Default) */
   --font-serif: "Playfair Display", serif;
   --font-sans: "Inter", sans-serif;
-  
   --color-bg: #121212;
   --color-surface: #181818;
   --color-surface-hover: #282828;
@@ -19,6 +19,31 @@
   --color-text-main: #ffffff;
   --color-text-muted: #b3b3b3;
   --color-border: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="fantasy"] {
+  --font-serif: "Cinzel", serif;
+  --font-sans: "Lora", serif;
+  --color-bg: #241b1b;
+  --color-surface: #2d2424;
+  --color-surface-hover: #3d3232;
+  --color-accent: #c89f9c;
+  --color-text-main: #f4e9e9;
+  --color-text-muted: #a68a8a;
+  --color-border: rgba(200, 159, 156, 0.1);
+}
+
+@theme {
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+  
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-surface-hover);
+  --color-accent: var(--color-accent);
+  --color-text-main: var(--color-text-main);
+  --color-text-muted: var(--color-text-muted);
+  --color-border: var(--color-border);
 }
 
 @layer base {
@@ -40,7 +65,7 @@
 
 @layer utilities {
   .glass {
-    @apply bg-[#121212]/80 backdrop-blur-2xl border-t border-white/5;
+    @apply bg-bg/80 backdrop-blur-2xl border-t border-white/5;
   }
 
   .card {
@@ -48,11 +73,11 @@
   }
   
   .input-field {
-    @apply w-full px-4 py-3 bg-[#242424] border border-transparent rounded-md focus:bg-[#333333] outline-none transition-all text-white placeholder:text-text-muted/50 text-sm;
+    @apply w-full px-4 py-3 bg-surface border border-transparent rounded-md focus:bg-surface-hover outline-none transition-all text-text-main placeholder:text-text-muted/50 text-sm;
   }
   
   .btn-primary {
-    @apply px-8 py-3 bg-accent text-black rounded-full font-bold hover:scale-105 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply px-8 py-3 bg-accent text-bg rounded-full font-bold hover:scale-105 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {

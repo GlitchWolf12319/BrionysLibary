@@ -36,7 +36,9 @@ import {
   GripVertical,
   Edit2,
   Clock,
-  GripHorizontal
+  GripHorizontal,
+  Palette,
+  Inbox
 } from "lucide-react";
 
 import { 
@@ -79,7 +81,7 @@ import { auth, db, signInWithGoogle, logOut, handleFirestoreError, OperationType
 import { onAuthStateChanged, User } from "firebase/auth";
 import { collection, doc, setDoc, deleteDoc, onSnapshot, query, where, updateDoc, writeBatch } from "firebase/firestore";
 
-type Tab = "collections" | "calendar" | "wishlist" | "dragons";
+type Tab = "collections" | "calendar" | "wishlist" | "dragons" | "uncategorized";
 
 const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: string, currentPage: number, totalPages: number, onUpdate: (id: string, page: number) => void }) => {
   const [localValue, setLocalValue] = useState(currentPage);
@@ -264,12 +266,12 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
   );
 });
 
-const SeriesCardHorizontal = ({ series, onClick }: { series: Series, onClick: () => void, key?: React.Key }) => (
+const SeriesCardHorizontal = ({ series, onClick, completedCount }: { series: Series, onClick: () => void, completedCount: number, key?: React.Key }) => (
   <div 
     onClick={onClick}
-    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 rounded-md overflow-hidden cursor-pointer transition-all active:scale-[0.98] group"
+    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 rounded-md overflow-hidden cursor-pointer transition-all active:scale-[0.98] group relative"
   >
-    <div className="w-14 h-14 flex-shrink-0 bg-surface-hover shadow-lg">
+    <div className="w-14 h-14 flex-shrink-0 bg-surface-hover shadow-lg relative">
       {series.coverUrl ? (
         <img src={series.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
       ) : (
@@ -277,12 +279,17 @@ const SeriesCardHorizontal = ({ series, onClick }: { series: Series, onClick: ()
           <Library className="w-5 h-5 text-text-muted opacity-20" />
         </div>
       )}
+      {completedCount > 0 && (
+        <div className="absolute -top-1 -right-1 w-5 h-5 bg-accent text-bg rounded-full flex items-center justify-center text-[10px] font-black shadow-lg border-2 border-bg z-10">
+          {completedCount}
+        </div>
+      )}
     </div>
     <span className="text-[11px] font-bold text-white truncate pr-2 group-hover:text-accent transition-colors">{series.title}</span>
   </div>
 );
 
-const SeriesCardSquare = ({ series, onClick }: { series: Series, onClick: () => void, key?: React.Key }) => (
+const SeriesCardSquare = ({ series, onClick, completedCount }: { series: Series, onClick: () => void, completedCount: number, key?: React.Key }) => (
   <div 
     onClick={onClick}
     className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-36 flex-shrink-0"
@@ -293,6 +300,11 @@ const SeriesCardSquare = ({ series, onClick }: { series: Series, onClick: () => 
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-surface-hover">
           <Library className="w-8 h-8 text-text-muted opacity-20" />
+        </div>
+      )}
+      {completedCount > 0 && (
+        <div className="absolute top-2 right-2 w-6 h-6 bg-accent text-bg rounded-full flex items-center justify-center text-[11px] font-black shadow-lg border-2 border-bg z-10">
+          {completedCount}
         </div>
       )}
       <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-accent text-bg flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl">
@@ -429,6 +441,18 @@ export default function App() {
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   
   const [activeTab, setActiveTab] = useState<Tab>("collections");
+  const [theme, setTheme] = useState<"og" | "fantasy">(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem("app-theme") as "og" | "fantasy") || "og";
+    }
+    return "og";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("app-theme", theme);
+  }, [theme]);
+
   const [isScanning, setIsScanning] = useState(false);
   const [isFetchingBook, setIsFetchingBook] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1359,9 +1383,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#121212] selection:bg-accent/30 flex flex-col pb-24 md:pb-0">
+    <div className="min-h-screen bg-bg selection:bg-accent/30 flex flex-col pb-24 md:pb-0">
       {/* Compact Header for Mobile */}
-      <header className={`sticky top-0 z-40 bg-[#121212]/95 backdrop-blur-2xl md:hidden px-6 py-4 flex flex-col gap-0.5 border-b border-white/5 ${viewingSeriesId ? 'hidden' : ''}`}>
+      <header className={`sticky top-0 z-40 bg-bg/95 backdrop-blur-2xl md:hidden px-6 py-4 flex flex-col gap-0.5 border-b border-white/5 ${viewingSeriesId ? 'hidden' : ''}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full bg-accent/10 flex items-center justify-center">
@@ -1375,7 +1399,7 @@ export default function App() {
             </button>
           )}
         </div>
-        <h1 className="text-2xl font-black text-white tracking-tight">
+        <h1 className="text-2xl font-serif font-black text-white tracking-tight">
           {viewingSeriesId ? seriesList.find(s => s.id === viewingSeriesId)?.title : 
            activeTab === "collections" ? "Your Library" : 
            activeTab === "calendar" ? "Reading Log" : 
@@ -1391,7 +1415,7 @@ export default function App() {
         <div className="max-w-6xl mx-auto relative z-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
             <div className="space-y-2 flex-1">
-              <h1 className="text-6xl font-black tracking-tighter text-white leading-tight">
+              <h1 className="text-6xl font-serif font-black tracking-tighter text-white leading-tight">
                 {activeTab === "collections" ? "Your Library" : 
                  activeTab === "calendar" ? "Reading Log" :
                  activeTab === "dragons" ? "Dragon Books" : "Wishlist"}
@@ -1434,6 +1458,7 @@ export default function App() {
       <div className="hidden md:flex max-w-6xl mx-auto px-6 mb-8 gap-10 border-b border-white/5">
         {[
           { id: "collections", label: "Library", icon: Library },
+          { id: "uncategorized", label: "Inbox", icon: Inbox },
           { id: "calendar", label: "Reading Log", icon: CalendarIcon },
           { id: "wishlist", label: "Wishlist", icon: ShoppingBag },
           { id: "dragons", label: "Dragons", icon: Flame },
@@ -1507,7 +1532,7 @@ export default function App() {
                             <div 
                               className="relative pt-20 pb-8 px-6 flex flex-col items-center text-center md:flex-row md:items-end md:text-left gap-6 transition-colors duration-500"
                               style={{ 
-                                background: `linear-gradient(to bottom, ${series.color || '#1DB954'}cc, #121212)` 
+                                background: `linear-gradient(to bottom, ${series.color || 'var(--color-accent)'}cc, var(--color-bg))` 
                               }}
                             >
                               {/* Floating Back Button - Sticky behavior handled by scrollY */}
@@ -1520,14 +1545,14 @@ export default function App() {
 
                               {/* Sticky Title Bar for Mobile */}
                               <AnimatePresence>
-                                {scrollY > 200 && (
+                                {scrollY > 200 && !currentBookDetail && (
                                   <motion.div
                                     initial={{ opacity: 0, y: -10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: -10 }}
                                     className="fixed top-0 left-0 right-0 h-14 flex items-center justify-center px-16 z-50 md:hidden shadow-2xl"
                                     style={{ 
-                                      background: `linear-gradient(to bottom, ${series.color || '#121212'}cc, #121212)` 
+                                      background: `linear-gradient(to bottom, ${series.color || 'var(--color-bg)'}cc, var(--color-bg))` 
                                     }}
                                   >
                                     <div className="absolute inset-0 backdrop-blur-xl" />
@@ -1669,6 +1694,7 @@ export default function App() {
                                   key={series.id} 
                                   series={series} 
                                   onClick={() => setViewingSeriesId(series.id)} 
+                                  completedCount={books.filter(b => b.seriesId === series.id && b.currentPage >= b.totalPages && b.totalPages > 0).length}
                                 />
                               ))}
                             </div>
@@ -1690,6 +1716,7 @@ export default function App() {
                                   <SeriesCardSquare 
                                     series={series} 
                                     onClick={() => setViewingSeriesId(series.id)} 
+                                    completedCount={books.filter(b => b.seriesId === series.id && b.currentPage >= b.totalPages && b.totalPages > 0).length}
                                   />
                                 </div>
                               ))}
@@ -1752,6 +1779,7 @@ export default function App() {
                                 key={series.id} 
                                 series={series} 
                                 onClick={() => setViewingSeriesId(series.id)} 
+                                completedCount={books.filter(b => b.seriesId === series.id && b.currentPage >= b.totalPages && b.totalPages > 0).length}
                               />
                             ))}
                           </div>
@@ -1932,16 +1960,60 @@ export default function App() {
                   </button>
                 </div>
               )}
+
+              {activeTab === "uncategorized" && (
+                <div className="space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center">
+                      <Inbox className="w-5 h-5 text-accent" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-black text-white tracking-tight">Inbox</h2>
+                      <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest">Books waiting for a collection</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {books.filter(b => !b.seriesId && !b.isWishlist && !b.isDragonBook).map((book, uIdx) => (
+                      <motion.div 
+                        key={`${book.id}-uncat-${uIdx}`} 
+                        layoutId={book.id}
+                        onClick={() => setSelectedBookForDetail(book)}
+                        className="card p-3 flex flex-col gap-3 group/uncat relative cursor-pointer hover:border-accent transition-all"
+                      >
+                        <div className="aspect-[2/3] w-full rounded-lg overflow-hidden border border-border">
+                          <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                        <div className="space-y-1">
+                          <h3 className="font-serif text-sm leading-tight truncate text-white">{book.title}</h3>
+                          <p className="text-[10px] text-text-muted italic truncate">{book.author}</p>
+                        </div>
+                      </motion.div>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        setNewBook({ ...newBook, seriesId: "", isWishlist: false, isDragonBook: false, coverUrl: "" });
+                        setIsAddBookModalOpen(true);
+                      }}
+                      className="border-2 border-dashed border-border rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-all group/add"
+                    >
+                      <Plus className="w-8 h-8 group-hover/add:scale-110 transition-transform" />
+                      <span className="text-xs font-bold uppercase tracking-widest">Add to Inbox</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
       </main>
 
       {/* Spotify-like Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[#121212]/95 backdrop-blur-2xl px-2 pt-2 pb-8 border-t border-white/5">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-bg/95 backdrop-blur-2xl px-2 pt-2 pb-8 border-t border-white/5">
         <div className="flex justify-around items-center max-w-md mx-auto">
           {[
             { id: "collections", label: "Home", icon: Library },
+            { id: "uncategorized", label: "Inbox", icon: Inbox },
             { id: "calendar", label: "Log", icon: CalendarIcon },
             { id: "wishlist", label: "Wishlist", icon: ShoppingBag },
             { id: "dragons", label: "Dragons", icon: Flame },
@@ -2160,7 +2232,7 @@ export default function App() {
                     </select>
                   </div>
 
-        <div className="flex items-center justify-between p-4 rounded-xl bg-[#242424] group hover:bg-[#2a2a2a] transition-all">
+        <div className="flex items-center justify-between p-4 rounded-xl bg-surface group hover:bg-surface-hover transition-all">
           <div className="flex items-center gap-3">
             <div className={`p-2 rounded-lg transition-colors ${newBook.isDragonBook ? 'bg-accent/20 text-accent' : 'bg-black/40 text-text-muted'}`}>
               <Flame className="w-5 h-5" />
@@ -2327,6 +2399,33 @@ export default function App() {
               <div className="space-y-6">
                 <div className="space-y-4">
                   <div className="flex items-center gap-3 text-white">
+                    <Palette className="w-5 h-5 text-accent" />
+                    <h4 className="font-bold uppercase tracking-widest text-xs">App Theme</h4>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => setTheme("og")}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'og' ? 'border-accent bg-accent/10' : 'border-white/5 bg-surface hover:bg-surface-hover'}`}
+                    >
+                      <div className="w-full h-12 rounded-lg bg-[#121212] flex items-center justify-center border border-white/5">
+                        <div className="w-6 h-6 rounded-full bg-[#1DB954]" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white">OG Dark</span>
+                    </button>
+                    <button 
+                      onClick={() => setTheme("fantasy")}
+                      className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'fantasy' ? 'border-accent bg-accent/10' : 'border-white/5 bg-surface hover:bg-surface-hover'}`}
+                    >
+                      <div className="w-full h-12 rounded-lg bg-[#241b1b] flex items-center justify-center border border-white/5">
+                        <div className="w-6 h-6 rounded-full bg-[#c89f9c]" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-white">Muted Fantasy</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 text-white">
                     <Library className="w-5 h-5 text-accent" />
                     <h4 className="font-bold uppercase tracking-widest text-xs">Manage Collections</h4>
                   </div>
@@ -2456,7 +2555,7 @@ export default function App() {
         )}
 
         {currentBookDetail && (
-          <div key="book-detail-modal-overlay" className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4">
+          <div key="book-detail-modal-overlay" className="fixed inset-0 z-[80] flex items-center justify-center p-0 md:p-4">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
@@ -2466,18 +2565,18 @@ export default function App() {
             />
             <motion.div 
               layoutId={currentBookDetail.id}
-              className="relative w-full h-full md:h-auto md:max-w-2xl bg-[#121212] md:rounded-3xl shadow-2xl overflow-y-auto flex flex-col max-h-screen md:max-h-[90vh] scrollbar-hide"
+              className="relative w-full h-full md:h-auto md:max-w-2xl bg-bg md:rounded-3xl shadow-2xl overflow-y-auto flex flex-col max-h-screen md:max-h-[90vh] scrollbar-hide z-10"
             >
               {/* Spotify-style Header */}
               <div 
                 className="relative pt-16 pb-8 px-6 flex flex-col items-center text-center gap-6 shrink-0"
                 style={{ 
-                  background: `linear-gradient(to bottom, ${seriesList.find(s => s.id === currentBookDetail.seriesId)?.color || '#1DB954'}44, #121212)` 
+                  background: `linear-gradient(to bottom, ${seriesList.find(s => s.id === currentBookDetail.seriesId)?.color || '#1DB954'}44, var(--color-bg))` 
                 }}
               >
                 <button 
                   onClick={() => setSelectedBookForDetail(null)} 
-                  className="fixed md:absolute top-6 left-6 p-2 text-white/70 hover:text-white transition-colors z-[70]"
+                  className="fixed md:absolute top-6 left-6 p-2 text-white/70 hover:text-white transition-colors z-[100]"
                 >
                   <ChevronLeft className="w-6 h-6" />
                 </button>
@@ -2499,7 +2598,7 @@ export default function App() {
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-3xl font-black text-white tracking-tighter leading-tight">{currentBookDetail.title}</h3>
+                  <h3 className="text-3xl font-serif font-black text-white tracking-tighter leading-tight">{currentBookDetail.title}</h3>
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden shrink-0">
                       {user?.photoURL ? <img src={user.photoURL} className="w-full h-full object-cover" /> : <UserIcon className="w-3 h-3 text-accent" />}
@@ -2546,8 +2645,25 @@ export default function App() {
                         <CheckCircle2 className="w-7 h-7" />
                       </button>
                     )}
+                    {!currentBookDetail.seriesId && !currentBookDetail.isWishlist && !currentBookDetail.isDragonBook && (
+                      <button 
+                        onClick={() => {
+                          setBookToMove(currentBookDetail);
+                          setIsSelectSeriesModalOpen(true);
+                          setSelectedBookForDetail(null);
+                        }}
+                        className="w-14 h-14 rounded-full bg-accent text-bg flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+                      >
+                        <Library className="w-7 h-7" />
+                      </button>
+                    )}
                     <button 
-                      onClick={() => setIsEditingBookDetail(true)}
+                      onClick={() => {
+                        if (currentBookDetail) {
+                          setEditedBook(currentBookDetail);
+                          setIsEditingBookDetail(true);
+                        }
+                      }}
                       className="text-text-muted hover:text-white transition-colors"
                     >
                       <Settings2 className="w-6 h-6" />
@@ -2625,7 +2741,7 @@ export default function App() {
                     initial={{ opacity: 0, y: '100%' }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: '100%' }}
-                    className="absolute inset-0 bg-[#121212] z-50 flex flex-col"
+                    className="absolute inset-0 bg-bg z-50 flex flex-col"
                   >
                     <div className="p-6 border-b border-white/5 flex justify-between items-center bg-surface/30 backdrop-blur-md">
                       <h3 className="text-xl font-black text-white tracking-tight">Edit Book</h3>
