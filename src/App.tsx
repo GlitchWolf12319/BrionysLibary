@@ -1920,12 +1920,6 @@ export default function App() {
               {activeTab === "collections" && user && !viewingSeriesId && (
                 <div className="fixed bottom-28 right-6 z-40 flex flex-col gap-4 items-end md:hidden">
                   <button 
-                    onClick={() => setIsScanning(true)}
-                    className="w-14 h-14 rounded-full bg-accent/20 backdrop-blur-md border border-accent/30 text-accent shadow-2xl flex items-center justify-center active:scale-90 transition-transform"
-                  >
-                    <Barcode className="w-8 h-8" />
-                  </button>
-                  <button 
                     onClick={() => {
                       setEditingSeries(null);
                       setNewSeries({ title: "", description: "", color: "#e6a8d7", coverUrl: "" });
@@ -2677,6 +2671,8 @@ export default function App() {
                 <BarcodeScanner 
                   onScanSuccess={(isbn) => {
                     console.log("Barcode scanned successfully:", isbn);
+                    setIsScanning(false);
+                    setIsAddBookModalOpen(true);
                     fetchBookByISBN(isbn);
                   }}
                 />
