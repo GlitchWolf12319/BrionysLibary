@@ -146,8 +146,8 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-accent">Slide to update progress</span>
         </div>
         <div className="flex items-baseline gap-1">
-          <span className="text-xl font-black text-white">{localValue}</span>
-          <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">/ {totalPages}</span>
+          <span className="text-xl font-black text-main">{localValue}</span>
+          <span className="text-[10px] font-bold text-muted uppercase tracking-widest">/ {totalPages}</span>
         </div>
       </div>
 
@@ -194,12 +194,12 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
       </div>
       
       <div className="flex justify-between items-center mt-2">
-        <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Start</span>
+        <span className="text-[9px] font-bold text-muted uppercase tracking-widest">Start</span>
         <div className="flex items-center gap-1.5">
           <span className="text-[14px] font-black text-accent">{Math.round(progress)}%</span>
-          <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Completed</span>
+          <span className="text-[9px] font-bold text-muted uppercase tracking-widest">Completed</span>
         </div>
-        <span className="text-[9px] font-bold text-text-muted uppercase tracking-widest">Finish</span>
+        <span className="text-[9px] font-bold text-muted uppercase tracking-widest">Finish</span>
       </div>
     </div>
   );
@@ -236,7 +236,7 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
                 e.stopPropagation();
                 onMove('left');
               }}
-              className="p-1.5 bg-black/80 backdrop-blur-md text-white rounded-full transition-all pointer-events-auto hover:bg-accent hover:text-black active:scale-90"
+              className="p-1.5 bg-black/80 backdrop-blur-md text-main rounded-full transition-all pointer-events-auto hover:bg-accent hover:text-bg active:scale-90"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -248,7 +248,7 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
                 e.stopPropagation();
                 onMove('right');
               }}
-              className="p-1.5 bg-black/80 backdrop-blur-md text-white rounded-full transition-all pointer-events-auto hover:bg-accent hover:text-black active:scale-90"
+              className="p-1.5 bg-black/80 backdrop-blur-md text-main rounded-full transition-all pointer-events-auto hover:bg-accent hover:text-bg active:scale-90"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -257,54 +257,54 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
       </div>
 
       <div className="px-1 py-1">
-        <h3 className={`font-bold text-xs md:text-sm leading-tight truncate ${isRead ? 'text-text-muted' : 'text-white'}`}>
+        <h3 className={`font-bold text-xs md:text-sm leading-tight truncate ${isRead ? 'text-muted' : 'text-main'}`}>
           {book.title}
         </h3>
-        <p className="text-[10px] text-text-muted truncate mt-0.5">{book.author}</p>
+        <p className="text-[10px] text-muted truncate mt-0.5">{book.author}</p>
       </div>
     </div>
   );
 });
 
-const SeriesCardHorizontal = ({ series, onClick, completedCount }: { series: Series, onClick: () => void, completedCount: number, key?: React.Key }) => (
+const SeriesCardHorizontal = ({ series, onClick, progress }: { series: Series, onClick: () => void, progress: number, key?: React.Key }) => (
   <div 
     onClick={onClick}
-    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 rounded-md overflow-hidden cursor-pointer transition-all active:scale-[0.98] group relative"
+    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 rounded-card overflow-hidden cursor-pointer transition-all active:scale-[0.98] group relative"
   >
     <div className="w-14 h-14 flex-shrink-0 bg-surface-hover shadow-lg relative">
       {series.coverUrl ? (
         <img src={series.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
-          <Library className="w-5 h-5 text-text-muted opacity-20" />
+          <Library className="w-5 h-5 text-muted opacity-20" />
         </div>
       )}
-      {completedCount > 0 && (
-        <div className="absolute -top-1 -right-1 w-5 h-5 bg-accent text-bg rounded-full flex items-center justify-center text-[10px] font-black shadow-lg border-2 border-bg z-10">
-          {completedCount}
+      {progress > 0 && (
+        <div className="absolute -top-1 -right-1 px-1.5 h-5 bg-accent text-bg rounded-full flex items-center justify-center text-[9px] font-black shadow-lg border-2 border-bg z-10 min-w-[20px]">
+          {progress}%
         </div>
       )}
     </div>
-    <span className="text-[11px] font-bold text-white truncate pr-2 group-hover:text-accent transition-colors">{series.title}</span>
+    <span className="text-[11px] font-bold text-main truncate pr-2 group-hover:text-accent transition-colors">{series.title}</span>
   </div>
 );
 
-const SeriesCardSquare = ({ series, onClick, completedCount }: { series: Series, onClick: () => void, completedCount: number, key?: React.Key }) => (
+const SeriesCardSquare = ({ series, onClick, progress }: { series: Series, onClick: () => void, progress: number, key?: React.Key }) => (
   <div 
     onClick={onClick}
-    className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-36 flex-shrink-0"
+    className="flex flex-col gap-2 p-3 rounded-card bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-36 flex-shrink-0"
   >
-    <div className="aspect-square w-full rounded-lg overflow-hidden shadow-2xl relative">
+    <div className="aspect-square w-full rounded-card overflow-hidden shadow-2xl relative">
       {series.coverUrl ? (
         <img src={series.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
       ) : (
         <div className="w-full h-full flex items-center justify-center bg-surface-hover">
-          <Library className="w-8 h-8 text-text-muted opacity-20" />
+          <Library className="w-8 h-8 text-muted opacity-20" />
         </div>
       )}
-      {completedCount > 0 && (
-        <div className="absolute top-2 right-2 w-6 h-6 bg-accent text-bg rounded-full flex items-center justify-center text-[11px] font-black shadow-lg border-2 border-bg z-10">
-          {completedCount}
+      {progress > 0 && (
+        <div className="absolute top-2 right-2 px-2 h-6 bg-accent text-bg rounded-full flex items-center justify-center text-[10px] font-black shadow-lg border-2 border-bg z-10 min-w-[24px]">
+          {progress}%
         </div>
       )}
       <div className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-accent text-bg flex items-center justify-center opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all shadow-xl">
@@ -312,11 +312,121 @@ const SeriesCardSquare = ({ series, onClick, completedCount }: { series: Series,
       </div>
     </div>
     <div className="space-y-0.5">
-      <h3 className="text-xs font-bold text-white truncate">{series.title}</h3>
-      <p className="text-[10px] text-text-muted line-clamp-2 leading-tight">Collection • {series.description || "Your reading journey"}</p>
+      <h3 className="text-xs font-bold text-main truncate">{series.title}</h3>
+      <p className="text-[10px] text-muted line-clamp-2 leading-tight">Collection • {series.description || "Your reading journey"}</p>
     </div>
   </div>
-); const BookListItem = React.memo(({ book, onClick, onMore }: { 
+);
+
+const BookSpine = ({ book, onClick }: { book: Book, onClick: () => void, key?: React.Key }) => {
+  const colors = [
+    '#f4a261', '#e76f51', '#2a9d8f', '#264653', 
+    '#e9c46a', '#8ab17d', '#b5838d', '#6d597a',
+    '#457b9d', '#1d3557', '#a8dadc', '#f1faee'
+  ];
+  const colorIndex = (book.title.length + book.author.length) % colors.length;
+  const spineColor = colors[colorIndex];
+  const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
+
+  return (
+    <motion.div 
+      whileHover={{ y: -5, scale: 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      onClick={onClick}
+      className="relative flex flex-col items-center justify-end cursor-pointer group shrink-0"
+      style={{ width: '32px', height: '140px' }}
+    >
+      {/* Spine Body */}
+      <div 
+        className={`absolute inset-0 rounded-sm shadow-lg transition-all ${isRead ? 'opacity-60 grayscale-[0.5]' : ''}`}
+        style={{ backgroundColor: spineColor }}
+      >
+        {/* Texture/Lines */}
+        <div className="absolute inset-y-0 left-1 w-[1px] bg-black/10" />
+        <div className="absolute inset-y-0 right-1 w-[1px] bg-black/10" />
+        <div className="absolute top-2 inset-x-0 h-[1px] bg-white/20" />
+        <div className="absolute bottom-2 inset-x-0 h-[1px] bg-white/20" />
+      </div>
+
+      {/* Vertical Title */}
+      <div className="relative z-10 h-full flex items-center justify-center py-4">
+        <span 
+          className="text-[9px] font-black text-white/90 uppercase tracking-widest whitespace-nowrap rotate-90 origin-center pointer-events-none"
+          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
+        >
+          {book.title.length > 20 ? book.title.substring(0, 17) + '...' : book.title}
+        </span>
+      </div>
+
+      {/* Progress Indicator */}
+      {book.totalPages > 0 && !isRead && (
+        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20 rounded-b-sm overflow-hidden">
+          <div 
+            className="h-full bg-white/40" 
+            style={{ width: `${(book.currentPage / book.totalPages) * 100}%` }} 
+          />
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+const ShelfDecoration = ({ type, position }: { type: 'plant1' | 'plant2' | 'dragon1' | 'toy', position: 'left' | 'right' }) => {
+  const urls = {
+    plant1: "https://img.icons8.com/emoji/512/potted-plant-emoji.png",
+    plant2: "https://img.icons8.com/emoji/512/cactus-emoji.png",
+    dragon1: "https://img.icons8.com/color/512/dragon.png",
+    toy: "https://img.icons8.com/color/512/teddy-bear.png"
+  };
+
+  const size = type.includes('dragon') || type === 'toy' ? 'w-16 h-16' : 'w-12 h-12';
+  const yOffset = 'translate-y-1';
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={`shrink-0 ${size} ${yOffset} ${position === 'left' ? 'mr-1' : 'ml-1'} flex items-end justify-center`}
+    >
+      <img 
+        src={urls[type]} 
+        className="w-full h-full object-contain drop-shadow-md" 
+        referrerPolicy="no-referrer"
+        alt={type}
+      />
+    </motion.div>
+  );
+};
+
+const Shelf = ({ children, title }: { children: React.ReactNode, title?: string, key?: React.Key }) => {
+  // Randomly select decorations for this shelf
+  const leftDeco = React.useMemo(() => {
+    const types: ('plant1' | 'plant2' | 'dragon1' | 'toy')[] = ['plant1', 'plant2', 'dragon1', 'toy'];
+    return types[Math.floor(Math.random() * types.length)];
+  }, []);
+
+  const rightDeco = React.useMemo(() => {
+    const types: ('plant1' | 'plant2' | 'dragon1' | 'toy')[] = ['plant1', 'plant2', 'dragon1', 'toy'];
+    return types[Math.floor(Math.random() * types.length)];
+  }, []);
+
+  return (
+    <div className="space-y-2 mb-10">
+      {title && <h3 className="text-xs font-bold text-muted uppercase tracking-[0.2em] px-2">{title}</h3>}
+      <div className="relative pt-4">
+        <div className="flex items-end gap-0.5 px-2 overflow-x-auto scrollbar-hide min-h-[150px] pb-1">
+          <ShelfDecoration type={leftDeco} position="left" />
+          {children}
+          <ShelfDecoration type={rightDeco} position="right" />
+        </div>
+        {/* The actual shelf wood/line */}
+        <div className="h-3 w-full bg-gradient-to-b from-[#3d2b1f] to-[#2a1d15] rounded-sm shadow-xl border-t border-white/5" />
+      </div>
+    </div>
+  );
+};
+
+const BookListItem = React.memo(({ book, onClick, onMore }: { 
   book: Book; 
   onClick: () => void; 
   onMore: (e: React.MouseEvent) => void;
@@ -325,7 +435,7 @@ const SeriesCardSquare = ({ series, onClick, completedCount }: { series: Series,
 
   return (
     <div
-      className="flex items-center gap-3 p-2 rounded-md transition-colors cursor-pointer group/item flex-1 min-w-0"
+      className="flex items-center gap-3 p-2 rounded-card transition-colors cursor-pointer group/item flex-1 min-w-0"
       onClick={onClick}
     >
       <div className="w-10 h-10 rounded-sm overflow-hidden shadow-lg flex-shrink-0">
@@ -337,14 +447,14 @@ const SeriesCardSquare = ({ series, onClick, completedCount }: { series: Series,
         />
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className={`font-bold text-[13px] truncate ${isRead ? 'text-text-muted' : 'text-white'}`}>
+        <h3 className={`font-bold text-[13px] truncate ${isRead ? 'text-muted' : 'text-main'}`}>
           {book.title}
         </h3>
-        <p className="text-[11px] text-text-muted truncate">{book.author}</p>
+        <p className="text-[11px] text-muted truncate">{book.author}</p>
       </div>
       <button 
         onClick={onMore}
-        className="p-2 text-text-muted hover:text-white transition-opacity"
+        className="p-2 text-muted hover:text-main transition-opacity"
       >
         <MoreVertical className="w-4 h-4" />
       </button>
@@ -388,7 +498,7 @@ const SortableBookItem = React.memo(({
       <div 
         {...attributes} 
         {...listeners} 
-        className="flex items-center justify-center text-text-muted group-hover/row:text-white cursor-grab active:cursor-grabbing py-4"
+        className="flex items-center justify-center text-muted group-hover/row:text-main cursor-grab active:cursor-grabbing py-4"
       >
         <GripVertical className="w-3 h-3 mr-1 opacity-0 group-hover/row:opacity-100 transition-opacity" />
         <span className="text-xs font-medium">{idx + 1}</span>
@@ -426,7 +536,7 @@ const StarRating = ({ rating, onRate, size = "md", interactive = true }: { ratin
           className={`${interactive ? 'cursor-pointer hover:scale-125 active:scale-90' : 'cursor-default'} focus:outline-none transition-all duration-300`}
         >
           <Star 
-            className={`${sizes[size]} ${star <= rating ? 'fill-accent text-accent' : 'text-white/10 fill-white/5'} transition-colors`} 
+            className={`${sizes[size]} ${star <= rating ? 'fill-accent text-accent' : 'text-muted/10 fill-muted/5'} transition-colors`} 
           />
         </button>
       ))}
@@ -441,12 +551,20 @@ export default function App() {
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   
   const [activeTab, setActiveTab] = useState<Tab>("collections");
-  const [theme, setTheme] = useState<"og" | "fantasy">(() => {
+  const [theme, setTheme] = useState<"og" | "fantasy" | "cozy">(() => {
     if (typeof window !== 'undefined') {
-      return (localStorage.getItem("app-theme") as "og" | "fantasy") || "og";
+      return (localStorage.getItem("app-theme") as "og" | "fantasy" | "cozy") || "og";
     }
     return "og";
   });
+
+  const getSeriesProgress = (seriesId: string) => {
+    const seriesBooks = books.filter(b => b.seriesId === seriesId);
+    if (seriesBooks.length === 0) return 0;
+    const totalRead = seriesBooks.reduce((sum, b) => sum + (b.currentPage || 0), 0);
+    const totalPages = seriesBooks.reduce((sum, b) => sum + (b.totalPages || 0), 0);
+    return totalPages > 0 ? Math.round((totalRead / totalPages) * 100) : 0;
+  };
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
@@ -1276,20 +1394,20 @@ export default function App() {
     return (
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl md:text-2xl font-bold text-white">{format(currentMonth, "MMMM yyyy")}</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-main">{format(currentMonth, "MMMM yyyy")}</h2>
           <div className="flex gap-1">
-            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 text-text-muted hover:text-white transition-colors">
+            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 text-muted hover:text-main transition-colors">
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 text-text-muted hover:text-white transition-colors">
+            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 text-muted hover:text-main transition-colors">
               <ChevronRight className="w-5 h-5" />
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-px bg-white/5 rounded-lg overflow-hidden border border-white/5">
+        <div className="grid grid-cols-7 gap-px bg-muted/5 rounded-lg overflow-hidden border border-border">
           {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
-            <div key={`${day}-${i}`} className="bg-surface p-3 text-center text-[10px] font-bold text-text-muted">
+            <div key={`${day}-${i}`} className="bg-surface p-3 text-center text-[10px] font-bold text-muted">
               {day}
             </div>
           ))}
@@ -1305,7 +1423,7 @@ export default function App() {
                 key={day.toISOString()} 
                 className={`min-h-[80px] md:min-h-[120px] p-2 transition-colors relative ${isCurrentMonth ? 'bg-surface' : 'bg-black/20 opacity-20'}`}
               >
-                <span className={`text-[10px] font-medium ${isToday ? 'text-accent font-bold' : 'text-text-muted'}`}>
+                <span className={`text-[10px] font-medium ${isToday ? 'text-accent font-bold' : 'text-muted'}`}>
                   {format(day, "d")}
                 </span>
                 
@@ -1394,19 +1512,19 @@ export default function App() {
             <span className="text-[9px] font-bold text-accent uppercase tracking-widest">Your Library</span>
           </div>
           {user && (
-            <button onClick={() => setIsSettingsModalOpen(true)} className="p-1 text-text-muted hover:text-white">
+            <button onClick={() => setIsSettingsModalOpen(true)} className="p-1 text-muted hover:text-main">
               <Settings2 className="w-4 h-4" />
             </button>
           )}
         </div>
-        <h1 className="text-2xl font-serif font-black text-white tracking-tight">
+        <h1 className="text-2xl font-serif font-black text-main tracking-tight">
           {viewingSeriesId ? seriesList.find(s => s.id === viewingSeriesId)?.title : 
            activeTab === "collections" ? "Your Library" : 
            activeTab === "calendar" ? "Reading Log" : 
            activeTab === "dragons" ? "Dragon Books" : "Wishlist"}
         </h1>
         {user && !viewingSeriesId && (
-          <p className="text-[10px] text-text-muted font-medium">Welcome back, {user.displayName?.split(' ')[0]}</p>
+          <p className="text-[10px] text-muted font-medium">Welcome back, {user.displayName?.split(' ')[0]}</p>
         )}
       </header>
 
@@ -1415,12 +1533,12 @@ export default function App() {
         <div className="max-w-6xl mx-auto relative z-10">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
             <div className="space-y-2 flex-1">
-              <h1 className="text-6xl font-serif font-black tracking-tighter text-white leading-tight">
+              <h1 className="text-6xl font-serif font-black tracking-tighter text-main leading-tight">
                 {activeTab === "collections" ? "Your Library" : 
                  activeTab === "calendar" ? "Reading Log" :
                  activeTab === "dragons" ? "Dragon Books" : "Wishlist"}
               </h1>
-              <p className="text-text-muted font-medium">
+              <p className="text-muted font-medium">
                 {user ? `Welcome back, ${user.displayName?.split(' ')[0]}` : 'Track your reading journey'}
               </p>
             </div>
@@ -1441,12 +1559,12 @@ export default function App() {
               )}
               
               {user && (
-                <div className="flex items-center gap-3 pl-6 border-l border-white/10">
+                <div className="flex items-center gap-3 pl-6 border-l border-border">
                   <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-bold text-white uppercase tracking-widest">{user.displayName}</span>
-                    <button onClick={logOut} className="text-[8px] text-text-muted hover:text-red-400 uppercase tracking-widest font-bold">Sign Out</button>
+                    <span className="text-[10px] font-bold text-main uppercase tracking-widest">{user.displayName}</span>
+                    <button onClick={logOut} className="text-[8px] text-muted hover:text-red-400 uppercase tracking-widest font-bold">Sign Out</button>
                   </div>
-                  <img src={user.photoURL || ""} alt="Profile" className="w-10 h-10 rounded-full border border-white/10" />
+                  <img src={user.photoURL || ""} alt="Profile" className="w-10 h-10 rounded-full border border-border" />
                 </div>
               )}
             </div>
@@ -1466,7 +1584,7 @@ export default function App() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as Tab)}
-            className={`flex items-center gap-3 pb-5 text-sm font-bold transition-all relative ${activeTab === tab.id ? 'text-white' : 'text-text-muted hover:text-white'}`}
+            className={`flex items-center gap-3 pb-5 text-sm font-bold transition-all relative ${activeTab === tab.id ? 'text-main' : 'text-muted hover:text-main'}`}
           >
             <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-accent' : ''}`} />
             {tab.label}
@@ -1491,8 +1609,8 @@ export default function App() {
                 <Library className="w-12 h-12 text-accent" />
               </div>
               <div className="space-y-4">
-                <h2 className="text-4xl font-serif font-bold text-white">Your library, anywhere.</h2>
-                <p className="text-text-muted max-w-md mx-auto">Sign in with Google to sync your reading collections, progress, and wishlist across all your devices.</p>
+                <h2 className="text-4xl font-serif font-bold text-main">Your library, anywhere.</h2>
+                <p className="text-muted max-w-md mx-auto">Sign in with Google to sync your reading collections, progress, and wishlist across all your devices.</p>
               </div>
               <button 
                 onClick={handleLogin}
@@ -1538,7 +1656,7 @@ export default function App() {
                               {/* Floating Back Button - Sticky behavior handled by scrollY */}
                               <button 
                                 onClick={() => setViewingSeriesId(null)}
-                                className={`fixed left-6 w-8 h-8 rounded-full flex items-center justify-center text-white transition-all z-[60] md:absolute ${scrollY > 200 ? 'top-3 bg-transparent' : 'top-8 bg-black/20 hover:bg-black/40'} ${currentBookDetail ? 'hidden' : ''}`}
+                                className={`fixed left-6 w-8 h-8 rounded-full flex items-center justify-center text-main transition-all z-[60] md:absolute ${scrollY > 200 ? 'top-3 bg-transparent' : 'top-8 bg-black/20 hover:bg-black/40'} ${currentBookDetail ? 'hidden' : ''}`}
                               >
                                 <ChevronLeft className="w-5 h-5" />
                               </button>
@@ -1556,7 +1674,7 @@ export default function App() {
                                     }}
                                   >
                                     <div className="absolute inset-0 backdrop-blur-xl" />
-                                    <h2 className="relative z-10 text-sm font-black text-white truncate">{series.title}</h2>
+                                    <h2 className="relative z-10 text-sm font-black text-main truncate">{series.title}</h2>
                                   </motion.div>
                                 )}
                               </AnimatePresence>
@@ -1571,7 +1689,7 @@ export default function App() {
                                 {series.coverUrl ? (
                                   <img src={series.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 ) : (
-                                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-text-muted">
+                                  <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted">
                                     <Library className="w-12 h-12 opacity-20" />
                                     <span className="text-[10px] font-bold uppercase tracking-widest">No Cover</span>
                                   </div>
@@ -1583,16 +1701,16 @@ export default function App() {
                                 className="flex-1 space-y-3"
                               >
                                 <div className="space-y-1">
-                                  <span className="text-[10px] font-bold text-white uppercase tracking-tight">Collection</span>
-                                  <h2 className="text-4xl md:text-6xl font-black text-white tracking-tighter leading-none">{series.title}</h2>
+                                  <span className="text-[10px] font-bold text-main uppercase tracking-tight">Collection</span>
+                                  <h2 className="text-4xl md:text-6xl font-black text-main tracking-tighter leading-none">{series.title}</h2>
                                 </div>
-                                <div className="flex items-center justify-center md:justify-start gap-2 text-[11px] font-bold text-text-muted">
+                                <div className="flex items-center justify-center md:justify-start gap-2 text-[11px] font-bold text-muted">
                                   <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden shrink-0">
                                      {user?.photoURL ? <img src={user.photoURL} className="w-full h-full object-cover" /> : <UserIcon className="w-3 h-3 text-accent" />}
                                   </div>
-                                  <span className="text-white hover:underline cursor-pointer">{user?.displayName}</span>
+                                  <span className="text-main hover:underline cursor-pointer">{user?.displayName}</span>
                                   <span>•</span>
-                                  <span className="text-white">{seriesBooks.length} books</span>
+                                  <span className="text-main">{seriesBooks.length} books</span>
                                   <span>•</span>
                                   <span>{Math.round(progress)}% read</span>
                                 </div>
@@ -1611,7 +1729,7 @@ export default function App() {
                                     setNewSeries({ title: series.title, description: series.description || "", color: series.color || "#e6a8d7", coverUrl: series.coverUrl || "" });
                                     setIsSeriesModalOpen(true);
                                   }}
-                                  className="text-text-muted hover:text-white transition-colors"
+                                  className="text-muted hover:text-main transition-colors"
                                   title="Edit Collection"
                                 >
                                   <MoreVertical className="w-6 h-6" />
@@ -1620,48 +1738,62 @@ export default function App() {
                             </div>
 
                             {/* Books List Header */}
-                            <div className="px-6 py-2 border-b border-white/5 grid grid-cols-[44px_1fr_48px] gap-4 text-[10px] font-bold text-text-muted uppercase tracking-widest">
-                              <div className="text-center">#</div>
-                              <div>Title</div>
-                              <div className="text-right"><Clock className="w-3 h-3 ml-auto" /></div>
-                            </div>
+                            {theme !== 'dragon' && (
+                              <div className="px-6 py-2 border-b border-border grid grid-cols-[44px_1fr_48px] gap-4 text-[10px] font-bold text-muted uppercase tracking-widest">
+                                <div className="text-center">#</div>
+                                <div>Title</div>
+                                <div className="text-right"><Clock className="w-3 h-3 ml-auto" /></div>
+                              </div>
+                            )}
 
                             {/* Books List */}
                             <div className="space-y-1">
-                              <DndContext 
-                                sensors={sensors}
-                                collisionDetection={closestCenter}
-                                onDragEnd={handleDragEnd}
-                              >
-                                <SortableContext 
-                                  items={seriesBooks.map(b => b.id)}
-                                  strategy={verticalListSortingStrategy}
-                                >
-                                  {seriesBooks.map((book, idx) => (
-                                    <SortableBookItem
-                                      key={book.id}
-                                      book={book}
-                                      idx={idx}
-                                      onClick={() => setSelectedBookForDetail(book)}
-                                      onMore={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedBookForDetail(book);
-                                      }}
+                              {theme === 'dragon' ? (
+                                <Shelf>
+                                  {seriesBooks.map(book => (
+                                    <BookSpine 
+                                      key={book.id} 
+                                      book={book} 
+                                      onClick={() => setSelectedBookForDetail(book)} 
                                     />
                                   ))}
-                                </SortableContext>
-                              </DndContext>
+                                </Shelf>
+                              ) : (
+                                <DndContext 
+                                  sensors={sensors}
+                                  collisionDetection={closestCenter}
+                                  onDragEnd={handleDragEnd}
+                                >
+                                  <SortableContext 
+                                    items={seriesBooks.map(b => b.id)}
+                                    strategy={verticalListSortingStrategy}
+                                  >
+                                    {seriesBooks.map((book, idx) => (
+                                      <SortableBookItem
+                                        key={book.id}
+                                        book={book}
+                                        idx={idx}
+                                        onClick={() => setSelectedBookForDetail(book)}
+                                        onMore={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedBookForDetail(book);
+                                        }}
+                                      />
+                                    ))}
+                                  </SortableContext>
+                                </DndContext>
+                              )}
                               <button 
                                 onClick={() => {
                                   setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
                                   setIsAddBookModalOpen(true);
                                 }}
-                                className="w-full flex items-center gap-3 p-2 px-6 rounded-md hover:bg-white/5 transition-colors group/add"
+                                className="w-full flex items-center gap-3 p-2 px-6 rounded-md hover:bg-muted/5 transition-colors group/add"
                               >
-                                <div className="w-10 h-10 rounded-sm border border-dashed border-white/10 flex items-center justify-center text-text-muted group-hover/add:border-accent group-hover/add:text-accent transition-colors">
+                                <div className="w-10 h-10 rounded-sm border border-dashed border-border flex items-center justify-center text-muted group-hover/add:border-accent group-hover/add:text-accent transition-colors">
                                   <Plus className="w-4 h-4" />
                                 </div>
-                                <span className="text-xs font-bold text-text-muted group-hover/add:text-white">Add Book</span>
+                                <span className="text-xs font-bold text-muted group-hover/add:text-main">Add Book</span>
                               </button>
                             </div>
                           </div>
@@ -1676,7 +1808,7 @@ export default function App() {
                           <button 
                             key={filter}
                             onClick={() => setLibraryFilter(filter)}
-                            className={`px-4 py-1.5 rounded-full text-[11px] font-bold transition-all whitespace-nowrap ${libraryFilter === filter ? 'bg-accent text-bg' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                            className={`px-4 py-1.5 rounded-button text-[11px] font-bold transition-all whitespace-nowrap ${libraryFilter === filter ? 'bg-accent text-bg' : 'bg-muted/10 text-main hover:bg-muted/20'}`}
                           >
                             {filter}
                           </button>
@@ -1687,14 +1819,14 @@ export default function App() {
                         <div className="space-y-10">
                           {/* Your recent series */}
                           <section className="space-y-4">
-                            <h2 className="text-2xl font-black text-white tracking-tight">Your recent series</h2>
+                            <h2 className="text-2xl font-black text-main tracking-tight">Your recent series</h2>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                               {seriesList.slice(0, 6).map((series) => (
                                 <SeriesCardHorizontal 
                                   key={series.id} 
                                   series={series} 
                                   onClick={() => setViewingSeriesId(series.id)} 
-                                  completedCount={books.filter(b => b.seriesId === series.id && b.currentPage >= b.totalPages && b.totalPages > 0).length}
+                                  progress={getSeriesProgress(series.id)}
                                 />
                               ))}
                             </div>
@@ -1702,7 +1834,7 @@ export default function App() {
 
                           {/* Made For You */}
                           <section className="space-y-4">
-                            <h2 className="text-xl font-black text-white tracking-tight">Made For {user.displayName?.split(' ')[0]}</h2>
+                            <h2 className="text-xl font-black text-main tracking-tight">Made For {user.displayName?.split(' ')[0]}</h2>
                             <div 
                               ref={scrollRef}
                               onMouseDown={handleMouseDown}
@@ -1716,7 +1848,7 @@ export default function App() {
                                   <SeriesCardSquare 
                                     series={series} 
                                     onClick={() => setViewingSeriesId(series.id)} 
-                                    completedCount={books.filter(b => b.seriesId === series.id && b.currentPage >= b.totalPages && b.totalPages > 0).length}
+                                    progress={getSeriesProgress(series.id)}
                                   />
                                 </div>
                               ))}
@@ -1724,7 +1856,7 @@ export default function App() {
                               {seriesList.length === 0 && (
                                 <div className="w-full py-12 text-center card border-dashed">
                                   <Library className="w-12 h-12 text-accent/20 mx-auto mb-4" />
-                                  <p className="text-xs text-text-muted">No collections yet</p>
+                                  <p className="text-xs text-muted">No collections yet</p>
                                 </div>
                               )}
                             </div>
@@ -1732,32 +1864,44 @@ export default function App() {
 
                           {/* Recently Updated (Books) */}
                           <section className="space-y-4">
-                            <h2 className="text-xl font-black text-white tracking-tight">Recently Updated</h2>
-                            <div 
-                              ref={recentScrollRef}
-                              onMouseDown={handleRecentMouseDown}
-                              onMouseLeave={() => setIsDraggingRecent(false)}
-                              onMouseUp={() => setIsDraggingRecent(false)}
-                              onMouseMove={handleRecentMouseMove}
-                              className={`flex items-start gap-4 overflow-x-auto pb-4 spotify-scrollbar ${isDraggingRecent ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
-                            >
-                              {ownedBooks.slice(0, 10).map((book) => (
-                                <div 
-                                  key={book.id}
-                                  onClick={() => !isDraggingRecent && setSelectedBookForDetail(book)}
-                                  className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-32 shrink-0"
-                                >
-                                  <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
-                                    <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <h2 className="text-xl font-black text-main tracking-tight">Recently Updated</h2>
+                            {theme === 'dragon' ? (
+                              <Shelf>
+                                {ownedBooks.slice(0, 20).map((book) => (
+                                  <BookSpine 
+                                    key={book.id} 
+                                    book={book} 
+                                    onClick={() => setSelectedBookForDetail(book)} 
+                                  />
+                                ))}
+                              </Shelf>
+                            ) : (
+                              <div 
+                                ref={recentScrollRef}
+                                onMouseDown={handleRecentMouseDown}
+                                onMouseLeave={() => setIsDraggingRecent(false)}
+                                onMouseUp={() => setIsDraggingRecent(false)}
+                                onMouseMove={handleRecentMouseMove}
+                                className={`flex items-start gap-4 overflow-x-auto pb-4 spotify-scrollbar ${isDraggingRecent ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
+                              >
+                                {ownedBooks.slice(0, 10).map((book) => (
+                                  <div 
+                                    key={book.id}
+                                    onClick={() => !isDraggingRecent && setSelectedBookForDetail(book)}
+                                    className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-32 shrink-0"
+                                  >
+                                    <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
+                                      <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <h3 className="text-[11px] font-bold text-main truncate">{book.title}</h3>
+                                      <p className="text-[9px] text-muted truncate">{book.author}</p>
+                                    </div>
                                   </div>
-                                  <div className="space-y-0.5">
-                                    <h3 className="text-[11px] font-bold text-white truncate">{book.title}</h3>
-                                    <p className="text-[9px] text-text-muted truncate">{book.author}</p>
-                                  </div>
-                                </div>
-                              ))}
-                              <div className="w-4 shrink-0" /> {/* Spacer for end of scroll */}
-                            </div>
+                                ))}
+                                <div className="w-4 shrink-0" /> {/* Spacer for end of scroll */}
+                              </div>
+                            )}
                           </section>
                         </div>
                       )}
@@ -1765,7 +1909,7 @@ export default function App() {
                       {libraryFilter === "Collections" && (
                         <div className="space-y-6">
                           <div className="flex items-center justify-between">
-                            <h2 className="text-2xl font-black text-white tracking-tight">All Collections</h2>
+                            <h2 className="text-2xl font-black text-main tracking-tight">All Collections</h2>
                             <button 
                               onClick={() => setIsSeriesModalOpen(true)}
                               className="text-xs font-bold text-accent hover:underline"
@@ -1773,23 +1917,43 @@ export default function App() {
                               + New Collection
                             </button>
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                            {seriesList.map((series) => (
-                              <SeriesCardHorizontal 
-                                key={series.id} 
-                                series={series} 
-                                onClick={() => setViewingSeriesId(series.id)} 
-                                completedCount={books.filter(b => b.seriesId === series.id && b.currentPage >= b.totalPages && b.totalPages > 0).length}
-                              />
-                            ))}
-                          </div>
+                          {theme === 'dragon' ? (
+                            <div className="space-y-2">
+                              {seriesList.map((series) => {
+                                const seriesBooks = books.filter(b => b.seriesId === series.id);
+                                if (seriesBooks.length === 0) return null;
+                                return (
+                                  <Shelf key={series.id} title={series.title}>
+                                    {seriesBooks.map(book => (
+                                      <BookSpine 
+                                        key={book.id} 
+                                        book={book} 
+                                        onClick={() => setSelectedBookForDetail(book)} 
+                                      />
+                                    ))}
+                                  </Shelf>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                              {seriesList.map((series) => (
+                                <SeriesCardHorizontal 
+                                  key={series.id} 
+                                  series={series} 
+                                  onClick={() => setViewingSeriesId(series.id)} 
+                                  progress={getSeriesProgress(series.id)}
+                                />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
 
                       {libraryFilter === "Wishlist" && (
                         <div className="space-y-6">
                           <div className="flex items-center justify-between">
-                            <h2 className="text-2xl font-black text-white tracking-tight">Your Wishlist</h2>
+                            <h2 className="text-2xl font-black text-main tracking-tight">Your Wishlist</h2>
                             <button 
                               onClick={() => {
                                 setNewBook({ ...newBook, isWishlist: true, isDragonBook: false, coverUrl: "" });
@@ -1811,8 +1975,8 @@ export default function App() {
                                   <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 </div>
                                 <div className="space-y-0.5">
-                                  <h3 className="text-[11px] font-bold text-white truncate">{book.title}</h3>
-                                  <p className="text-[9px] text-text-muted truncate">{book.author}</p>
+                                  <h3 className="text-[11px] font-bold text-main truncate">{book.title}</h3>
+                                  <p className="text-[9px] text-muted truncate">{book.author}</p>
                                 </div>
                               </div>
                             ))}
@@ -1823,7 +1987,7 @@ export default function App() {
                       {libraryFilter === "Dragons" && (
                         <div className="space-y-6">
                           <div className="flex items-center justify-between">
-                            <h2 className="text-2xl font-black text-white tracking-tight">Dragon Books</h2>
+                            <h2 className="text-2xl font-black text-main tracking-tight">Dragon Books</h2>
                             <button 
                               onClick={() => {
                                 setNewBook({ ...newBook, isWishlist: false, isDragonBook: true, coverUrl: "" });
@@ -1834,23 +1998,35 @@ export default function App() {
                               + Add Dragon Book
                             </button>
                           </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                            {dragonBooks.map((book) => (
-                              <div 
-                                key={book.id}
-                                onClick={() => setSelectedBookForDetail(book)}
-                                className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group"
-                              >
-                                <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
-                                  <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          {theme === 'dragon' ? (
+                            <Shelf>
+                              {dragonBooks.map((book) => (
+                                <BookSpine 
+                                  key={book.id} 
+                                  book={book} 
+                                  onClick={() => setSelectedBookForDetail(book)} 
+                                />
+                              ))}
+                            </Shelf>
+                          ) : (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                              {dragonBooks.map((book) => (
+                                <div 
+                                  key={book.id}
+                                  onClick={() => setSelectedBookForDetail(book)}
+                                  className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group"
+                                >
+                                  <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
+                                    <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    <h3 className="text-[11px] font-bold text-main truncate">{book.title}</h3>
+                                    <p className="text-[9px] text-muted truncate">{book.author}</p>
+                                  </div>
                                 </div>
-                                <div className="space-y-0.5">
-                                  <h3 className="text-[11px] font-bold text-white truncate">{book.title}</h3>
-                                  <p className="text-[9px] text-text-muted truncate">{book.author}</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1864,24 +2040,24 @@ export default function App() {
                   
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="card p-4 border-l-2 border-l-accent flex flex-col justify-center gap-1">
-                      <span className="text-[8px] uppercase tracking-[0.2em] text-text-muted font-bold">This Month</span>
+                      <span className="text-[8px] uppercase tracking-[0.2em] text-muted font-bold">This Month</span>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-serif font-black text-white">{finishedThisMonth}</span>
-                        <span className="text-[10px] text-text-muted italic">Books Finished</span>
+                        <span className="text-3xl font-serif font-black text-main">{finishedThisMonth}</span>
+                        <span className="text-[10px] text-muted italic">Books Finished</span>
                       </div>
                     </div>
                     <div className="card p-4 border-l-2 border-l-border flex flex-col justify-center gap-1">
-                      <span className="text-[8px] uppercase tracking-[0.2em] text-text-muted font-bold">This Year</span>
+                      <span className="text-[8px] uppercase tracking-[0.2em] text-muted font-bold">This Year</span>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-serif font-black text-white">{finishedThisYear}</span>
-                        <span className="text-[10px] text-text-muted italic">Books Finished</span>
+                        <span className="text-3xl font-serif font-black text-main">{finishedThisYear}</span>
+                        <span className="text-[10px] text-muted italic">Books Finished</span>
                       </div>
                     </div>
                     <div className="card p-4 border-l-2 border-l-accent/40 flex flex-col justify-center gap-1">
-                      <span className="text-[8px] uppercase tracking-[0.2em] text-text-muted font-bold">Total Progress</span>
+                      <span className="text-[8px] uppercase tracking-[0.2em] text-muted font-bold">Total Progress</span>
                       <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-serif font-black text-white">{totalPagesRead.toLocaleString()}</span>
-                        <span className="text-[10px] text-text-muted italic">Pages Read</span>
+                        <span className="text-3xl font-serif font-black text-main">{totalPagesRead.toLocaleString()}</span>
+                        <span className="text-[10px] text-muted italic">Pages Read</span>
                       </div>
                     </div>
                   </div>
@@ -1901,8 +2077,8 @@ export default function App() {
                         <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       </div>
                       <div className="space-y-1">
-                        <h3 className="font-serif text-sm leading-tight truncate text-white">{book.title}</h3>
-                        <p className="text-[10px] text-text-muted italic truncate">{book.author}</p>
+                        <h3 className="font-serif text-sm leading-tight truncate text-main">{book.title}</h3>
+                        <p className="text-[10px] text-muted italic truncate">{book.author}</p>
                         {book.seriesId && (
                           <div className="flex items-center gap-1.5 mt-1">
                             <div 
@@ -1922,7 +2098,7 @@ export default function App() {
                       setNewBook({ ...newBook, isWishlist: true, isDragonBook: false, coverUrl: "" });
                       setIsAddBookModalOpen(true);
                     }}
-                    className="border-2 border-dashed border-border rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-all group/add"
+                    className="border-2 border-dashed border-border rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-muted hover:border-accent hover:text-accent transition-all group/add"
                   >
                     <ShoppingBag className="w-8 h-8 group-hover/add:scale-110 transition-transform" />
                     <span className="text-xs font-bold uppercase tracking-widest">Add to Wishlist</span>
@@ -1943,8 +2119,8 @@ export default function App() {
                         <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       </div>
                       <div className="space-y-1">
-                        <h3 className="font-serif text-sm leading-tight truncate text-white">{book.title}</h3>
-                        <p className="text-[10px] text-text-muted italic truncate">{book.author}</p>
+                        <h3 className="font-serif text-sm leading-tight truncate text-main">{book.title}</h3>
+                        <p className="text-[10px] text-muted italic truncate">{book.author}</p>
                       </div>
                     </motion.div>
                   ))}
@@ -1953,7 +2129,7 @@ export default function App() {
                       setNewBook({ ...newBook, isDragonBook: true, isWishlist: false, coverUrl: "" });
                       setIsAddBookModalOpen(true);
                     }}
-                    className="border-2 border-dashed border-border rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-all group/add"
+                    className="border-2 border-dashed border-border rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-muted hover:border-accent hover:text-accent transition-all group/add"
                   >
                     <Flame className="w-8 h-8 group-hover/add:scale-110 transition-transform" />
                     <span className="text-xs font-bold uppercase tracking-widest">Add Dragon Book</span>
@@ -1968,8 +2144,8 @@ export default function App() {
                       <Inbox className="w-5 h-5 text-accent" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-black text-white tracking-tight">Inbox</h2>
-                      <p className="text-[10px] text-text-muted font-bold uppercase tracking-widest">Books waiting for a collection</p>
+                      <h2 className="text-xl font-black text-main tracking-tight">Inbox</h2>
+                      <p className="text-[10px] text-muted font-bold uppercase tracking-widest">Books waiting for a collection</p>
                     </div>
                   </div>
 
@@ -1985,8 +2161,8 @@ export default function App() {
                           <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         </div>
                         <div className="space-y-1">
-                          <h3 className="font-serif text-sm leading-tight truncate text-white">{book.title}</h3>
-                          <p className="text-[10px] text-text-muted italic truncate">{book.author}</p>
+                          <h3 className="font-serif text-sm leading-tight truncate text-main">{book.title}</h3>
+                          <p className="text-[10px] text-muted italic truncate">{book.author}</p>
                         </div>
                       </motion.div>
                     ))}
@@ -1995,7 +2171,7 @@ export default function App() {
                         setNewBook({ ...newBook, seriesId: "", isWishlist: false, isDragonBook: false, coverUrl: "" });
                         setIsAddBookModalOpen(true);
                       }}
-                      className="border-2 border-dashed border-border rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-all group/add"
+                      className="border-2 border-dashed border-border rounded-3xl aspect-[2/3] flex flex-col items-center justify-center gap-2 text-muted hover:border-accent hover:text-accent transition-all group/add"
                     >
                       <Plus className="w-8 h-8 group-hover/add:scale-110 transition-transform" />
                       <span className="text-xs font-bold uppercase tracking-widest">Add to Inbox</span>
@@ -2009,7 +2185,7 @@ export default function App() {
       </main>
 
       {/* Spotify-like Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-bg/95 backdrop-blur-2xl px-2 pt-2 pb-8 border-t border-white/5">
+      <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-bg/95 backdrop-blur-2xl px-2 pt-2 pb-8 border-t border-border">
         <div className="flex justify-around items-center max-w-md mx-auto">
           {[
             { id: "collections", label: "Home", icon: Library },
@@ -2021,7 +2197,7 @@ export default function App() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as Tab)}
-              className={`flex-1 flex flex-col items-center py-2 gap-1 transition-all active:scale-95 ${activeTab === tab.id ? 'text-white' : 'text-text-muted'}`}
+              className={`flex-1 flex flex-col items-center py-2 gap-1 transition-all active:scale-95 ${activeTab === tab.id ? 'text-main' : 'text-muted'}`}
             >
               <tab.icon className={`w-6 h-6 transition-all ${activeTab === tab.id ? 'text-accent fill-accent/20' : ''}`} />
               <span className={`text-[9px] font-medium tracking-tight transition-all ${activeTab === tab.id ? 'opacity-100' : 'opacity-60'}`}>{tab.label}</span>
@@ -2039,7 +2215,7 @@ export default function App() {
                       setNewSeries({ title: "", description: "", color: "#e6a8d7", coverUrl: "" });
                       setIsSeriesModalOpen(true);
                     }}
-                    className="w-16 h-16 rounded-full bg-accent text-bg shadow-2xl flex items-center justify-center active:scale-90 transition-transform"
+                    className="w-16 h-16 rounded-button bg-accent text-bg shadow-2xl flex items-center justify-center active:scale-90 transition-transform"
                   >
                     <Plus className="w-10 h-10" />
                   </button>
@@ -2061,13 +2237,13 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }} 
               animate={{ opacity: 1, y: 0 }} 
               exit={{ opacity: 0, y: 20 }} 
-              className="relative w-full max-w-[320px] bg-surface border border-white/10 rounded-[32px] p-8 text-center shadow-2xl"
+              className="relative w-full max-w-[320px] bg-surface border border-border rounded-[32px] p-8 text-center shadow-2xl"
             >
               <div className="w-14 h-14 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6 rotate-3">
                 <Trash2 className="w-7 h-7" />
               </div>
-              <h3 className="text-xl font-serif font-bold mb-2 text-white">{confirmModal.title}</h3>
-              <p className="text-text-muted text-sm mb-8 leading-relaxed">{confirmModal.message}</p>
+              <h3 className="text-xl font-serif font-bold mb-2 text-main">{confirmModal.title}</h3>
+              <p className="text-muted text-sm mb-8 leading-relaxed">{confirmModal.message}</p>
               <div className="flex flex-col gap-3">
                 <button 
                   onClick={confirmModal.onConfirm}
@@ -2079,7 +2255,7 @@ export default function App() {
                 </button>
                 <button 
                   onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                  className="w-full py-4 text-text-muted hover:text-white font-bold transition-colors text-sm"
+                  className="w-full py-4 text-muted hover:text-main font-bold transition-colors text-sm"
                 >
                   Cancel
                 </button>
@@ -2099,11 +2275,11 @@ export default function App() {
             >
               <div className="p-4 md:p-6 border-b border-border flex justify-between items-center bg-surface/50 backdrop-blur-sm shrink-0">
                 <div className="space-y-0.5">
-                  <h3 className="text-lg md:text-2xl font-serif font-bold leading-tight">Add {newBook.isWishlist ? "to Wishlist" : "New Book"}</h3>
-                  <p className="text-[8px] md:text-[10px] text-text-muted uppercase tracking-widest font-medium">Enter details manually or scan</p>
+                  <h3 className="text-lg md:text-2xl font-serif font-bold leading-tight text-main">Add {newBook.isWishlist ? "to Wishlist" : "New Book"}</h3>
+                  <p className="text-[8px] md:text-[10px] text-muted uppercase tracking-widest font-medium">Enter details manually or scan</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setIsAddBookModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setIsAddBookModalOpen(false)} className="p-2 text-muted hover:text-main"><X className="w-5 h-5" /></button>
                 </div>
               </div>
 
@@ -2137,7 +2313,7 @@ export default function App() {
                   
                   <div className="flex flex-col md:flex-row gap-6 items-start">
                     <div className="w-full md:w-auto space-y-3">
-                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Cover Image</label>
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Cover Image</label>
                       <div 
                         onClick={() => fileInputRef.current?.click()}
                         className="group relative aspect-[2/3] w-24 md:w-32 rounded-2xl md:rounded-3xl overflow-hidden border-2 border-dashed border-border hover:border-accent transition-all cursor-pointer bg-bg/50 flex flex-col items-center justify-center gap-2 shadow-inner mx-auto md:mx-0"
@@ -2146,13 +2322,13 @@ export default function App() {
                           <>
                             <img src={newBook.coverUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                              <Upload className="w-5 h-5 text-white" />
+                              <Upload className="w-5 h-5 text-bg" />
                             </div>
                           </>
                         ) : (
                           <>
-                            <ImageIcon className="w-6 h-6 text-text-muted group-hover:text-accent transition-colors" />
-                            <span className="text-[8px] font-bold uppercase tracking-widest text-text-muted group-hover:text-accent">Upload</span>
+                            <ImageIcon className="w-6 h-6 text-muted group-hover:text-accent transition-colors" />
+                            <span className="text-[8px] font-bold uppercase tracking-widest text-muted group-hover:text-accent">Upload</span>
                           </>
                         )}
                       </div>
@@ -2160,7 +2336,7 @@ export default function App() {
 
                     <div className="flex-1 w-full space-y-4">
                       <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">ISBN (Optional)</label>
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">ISBN (Optional)</label>
                         <div className="relative flex gap-2">
                           <input 
                             value={newBook.isbn || ""} 
@@ -2189,7 +2365,7 @@ export default function App() {
                       </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Initial Rating (Optional)</label>
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Initial Rating (Optional)</label>
                       <StarRating 
                         rating={newBook.rating || 0} 
                         onRate={(r) => setNewBook({...newBook, rating: r})} 
@@ -2198,7 +2374,7 @@ export default function App() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Title</label>
                       <input required value={newBook.title} onChange={e => setNewBook({...newBook, title: e.target.value})} className="input-field text-sm" placeholder="e.g. The Fellowship..." />
                     </div>
                     </div>
@@ -2206,20 +2382,20 @@ export default function App() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Author</label>
+                      <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Author</label>
                       <input required value={newBook.author} onChange={e => setNewBook({...newBook, author: e.target.value})} className="input-field text-sm" placeholder="e.g. J.R.R. Tolkien" />
                     </div>
                     
                     {!newBook.isWishlist && (
                       <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Total Pages</label>
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Total Pages</label>
                         <input required type="number" min="1" value={newBook.totalPages || ""} onChange={e => setNewBook({...newBook, totalPages: parseInt(e.target.value)})} className="input-field text-sm" placeholder="e.g. 423" />
                       </div>
                     )}
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Collection (Optional)</label>
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Collection (Optional)</label>
                     <select 
                       value={newBook.seriesId || ""} 
                       onChange={e => setNewBook({...newBook, seriesId: e.target.value})}
@@ -2234,12 +2410,12 @@ export default function App() {
 
         <div className="flex items-center justify-between p-4 rounded-xl bg-surface group hover:bg-surface-hover transition-all">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg transition-colors ${newBook.isDragonBook ? 'bg-accent/20 text-accent' : 'bg-black/40 text-text-muted'}`}>
+            <div className={`p-2 rounded-lg transition-colors ${newBook.isDragonBook ? 'bg-accent/20 text-accent' : 'bg-muted/10 text-muted'}`}>
               <Flame className="w-5 h-5" />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs font-bold text-white">Dragon Book</span>
-              <span className="text-[10px] text-text-muted">Special collection</span>
+              <span className="text-xs font-bold text-main">Dragon Book</span>
+              <span className="text-[10px] text-muted">Special collection</span>
             </div>
           </div>
           <button 
@@ -2273,12 +2449,12 @@ export default function App() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSeriesModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-serif font-bold">{editingSeries ? "Edit Collection" : "New Collection"}</h3>
-                <button onClick={() => setIsSeriesModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                <h3 className="text-2xl font-serif font-bold text-main">{editingSeries ? "Edit Collection" : "New Collection"}</h3>
+                <button onClick={() => setIsSeriesModalOpen(false)} className="p-2 text-muted hover:text-main"><X className="w-5 h-5" /></button>
               </div>
               <form onSubmit={handleSaveSeries} className="space-y-6">
                 <div 
-                  className="w-32 h-32 mx-auto rounded-2xl bg-surface-hover border-2 border-dashed border-white/10 flex flex-col items-center justify-center gap-2 text-text-muted hover:border-accent hover:text-accent transition-all cursor-pointer overflow-hidden relative group"
+                  className="w-32 h-32 mx-auto rounded-2xl bg-surface-hover border-2 border-dashed border-border flex flex-col items-center justify-center gap-2 text-muted hover:border-accent hover:text-accent transition-all cursor-pointer overflow-hidden relative group"
                   onClick={() => {
                     setIsUploadingSeriesCover(false); // This is for the "New/Edit" modal, not the detail view
                     fileInputRef.current?.click();
@@ -2293,20 +2469,20 @@ export default function App() {
                     </>
                   )}
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Upload className="w-4 h-4 text-white" />
+                    <Upload className="w-4 h-4 text-bg" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Collection Title</label>
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Collection Title</label>
                   <input required value={newSeries.title} onChange={e => setNewSeries({...newSeries, title: e.target.value})} className="input-field" placeholder="e.g. The Lord of the Rings" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Description</label>
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Description</label>
                   <textarea value={newSeries.description} onChange={e => setNewSeries({...newSeries, description: e.target.value})} className="input-field h-24 resize-none" placeholder="Brief description of the saga..." />
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Theme Color</label>
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Theme Color</label>
                     <input 
                       type="color" 
                       value={newSeries.color || "#1DB954"} 
@@ -2357,12 +2533,12 @@ export default function App() {
               className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide"
             >
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-serif font-bold">Add Chapter</h3>
-                <button onClick={() => setIsAddChapterModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                <h3 className="text-2xl font-serif font-bold text-main">Add Chapter</h3>
+                <button onClick={() => setIsAddChapterModalOpen(false)} className="p-2 text-muted hover:text-main"><X className="w-5 h-5" /></button>
               </div>
               <form onSubmit={handleAddChapter} className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Chapter Title</label>
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Chapter Title</label>
                   <input 
                     required 
                     value={newChapterData.title} 
@@ -2372,7 +2548,7 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Notes</label>
+                  <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Notes</label>
                   <textarea 
                     value={newChapterData.notes} 
                     onChange={e => setNewChapterData({...newChapterData, notes: e.target.value})} 
@@ -2390,52 +2566,70 @@ export default function App() {
         {isSettingsModalOpen && (
           <div key="settings-modal-container" className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSettingsModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide rounded-card">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-serif font-bold">Settings</h3>
-                <button onClick={() => setIsSettingsModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                <h3 className="text-2xl font-serif font-bold text-main">Settings</h3>
+                <button onClick={() => setIsSettingsModalOpen(false)} className="p-2 text-muted hover:text-main"><X className="w-5 h-5" /></button>
               </div>
               
               <div className="space-y-6">
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 text-white">
+                  <div className="flex items-center gap-3 text-main">
                     <Palette className="w-5 h-5 text-accent" />
                     <h4 className="font-bold uppercase tracking-widest text-xs">App Theme</h4>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <button 
-                      onClick={() => setTheme("og")}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'og' ? 'border-accent bg-accent/10' : 'border-white/5 bg-surface hover:bg-surface-hover'}`}
-                    >
-                      <div className="w-full h-12 rounded-lg bg-[#121212] flex items-center justify-center border border-white/5">
-                        <div className="w-6 h-6 rounded-full bg-[#1DB954]" />
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-white">OG Dark</span>
-                    </button>
-                    <button 
-                      onClick={() => setTheme("fantasy")}
-                      className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'fantasy' ? 'border-accent bg-accent/10' : 'border-white/5 bg-surface hover:bg-surface-hover'}`}
-                    >
-                      <div className="w-full h-12 rounded-lg bg-[#241b1b] flex items-center justify-center border border-white/5">
-                        <div className="w-6 h-6 rounded-full bg-[#c89f9c]" />
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-widest text-white">Muted Fantasy</span>
-                    </button>
+                      <button 
+                        onClick={() => setTheme("og")}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'og' ? 'border-accent bg-accent/10' : 'border-border bg-surface hover:bg-surface-hover'}`}
+                      >
+                        <div className="w-full h-12 rounded-lg bg-[#121212] flex items-center justify-center border border-border">
+                          <div className="w-6 h-6 rounded-full bg-[#1DB954]" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-main">OG Dark</span>
+                      </button>
+                      <button 
+                        onClick={() => setTheme("fantasy")}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'fantasy' ? 'border-accent bg-accent/10' : 'border-border bg-surface hover:bg-surface-hover'}`}
+                      >
+                        <div className="w-full h-12 rounded-lg bg-[#241b1b] flex items-center justify-center border border-border">
+                          <div className="w-6 h-6 rounded-full bg-[#c89f9c]" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-main">Muted Fantasy</span>
+                      </button>
+                      <button 
+                        onClick={() => setTheme("cozy")}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'cozy' ? 'border-accent bg-accent/10' : 'border-border bg-surface hover:bg-surface-hover'}`}
+                      >
+                        <div className="w-full h-12 rounded-lg bg-[#f4ece4] flex items-center justify-center border border-border">
+                          <div className="w-6 h-6 rounded-full bg-[#7a8da3]" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-main">Cozy Bookstore</span>
+                      </button>
+                      <button 
+                        onClick={() => setTheme("dragon")}
+                        className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 ${theme === 'dragon' ? 'border-accent bg-accent/10' : 'border-border bg-surface hover:bg-surface-hover'}`}
+                      >
+                        <div className="w-full h-12 rounded-lg bg-[#0d1a18] flex items-center justify-center border border-border">
+                          <div className="w-6 h-6 rounded-full bg-[#e6a8d7]" />
+                        </div>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-main">Dragon Shelf</span>
+                      </button>
                   </div>
                 </div>
 
                 <div className="space-y-4">
-                  <div className="flex items-center gap-3 text-white">
+                  <div className="flex items-center gap-3 text-main">
                     <Library className="w-5 h-5 text-accent" />
                     <h4 className="font-bold uppercase tracking-widest text-xs">Manage Collections</h4>
                   </div>
                   
                   <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 scrollbar-hide">
                     {seriesList.map((series) => (
-                      <div key={`settings-series-${series.id}`} className="flex items-center justify-between p-4 rounded-xl bg-surface border border-white/5 group">
+                      <div key={`settings-series-${series.id}`} className="flex items-center justify-between p-4 rounded-xl bg-surface border border-border group">
                         <div className="flex items-center gap-3">
                           <div className="w-2 h-2 rounded-full" style={{ backgroundColor: series.color }} />
-                          <span className="text-sm font-bold text-white">{series.title}</span>
+                          <span className="text-sm font-bold text-main">{series.title}</span>
                         </div>
                         <div className="flex gap-2">
                           <button 
@@ -2444,7 +2638,7 @@ export default function App() {
                               setNewSeries({ title: series.title, description: series.description || "", color: series.color || "#e6a8d7", coverUrl: series.coverUrl || "" });
                               setIsSeriesModalOpen(true);
                             }}
-                            className="p-2 text-text-muted hover:text-accent transition-colors"
+                            className="p-2 text-muted hover:text-accent transition-colors"
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
@@ -2454,7 +2648,7 @@ export default function App() {
                                 deleteSeries(series.id);
                               }
                             }}
-                            className="p-2 text-text-muted hover:text-red-400 transition-colors"
+                            className="p-2 text-muted hover:text-red-400 transition-colors"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -2462,7 +2656,7 @@ export default function App() {
                       </div>
                     ))}
                     {seriesList.length === 0 && (
-                      <p className="text-xs text-text-muted italic text-center py-4">No collections found.</p>
+                      <p className="text-xs text-muted italic text-center py-4">No collections found.</p>
                     )}
                   </div>
                 </div>
@@ -2472,7 +2666,7 @@ export default function App() {
                     <AlertTriangle className="w-5 h-5" />
                     <h4 className="font-bold uppercase tracking-widest text-xs">Danger Zone</h4>
                   </div>
-                  <p className="text-xs text-text-muted leading-relaxed">
+                  <p className="text-xs text-muted leading-relaxed">
                     Purging your data will permanently remove all your books, collections, and reading history from our servers. This action is irreversible.
                   </p>
                   <button 
@@ -2492,17 +2686,17 @@ export default function App() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsSelectSeriesModalOpen(false)} className="absolute inset-0 bg-bg/80 backdrop-blur-md" />
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="relative w-full max-w-md card p-8 max-h-[90vh] overflow-y-auto scrollbar-hide">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="text-2xl font-serif font-bold">
+                <h3 className="text-2xl font-serif font-bold text-main">
                   {bookToMove?.isWishlist ? "Mark as Bought" : "Select Collection"}
                 </h3>
-                <button onClick={() => setIsSelectSeriesModalOpen(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                <button onClick={() => setIsSelectSeriesModalOpen(false)} className="p-2 text-muted hover:text-main"><X className="w-5 h-5" /></button>
               </div>
               <div className="space-y-6">
-                <p className="text-sm text-text-muted">Which collection does <span className="text-white font-bold italic">"{bookToMove?.title}"</span> belong to?</p>
+                <p className="text-sm text-muted">Which collection does <span className="text-main font-bold italic">"{bookToMove?.title}"</span> belong to?</p>
                 
                 {bookToMove?.totalPages === 0 && (
                   <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Total Pages</label>
+                    <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Total Pages</label>
                     <input 
                       type="number" 
                       min="1" 
@@ -2525,7 +2719,7 @@ export default function App() {
                       className="w-full p-4 rounded-2xl border border-border bg-surface hover:border-accent hover:bg-accent/5 transition-all flex items-center gap-4 group"
                     >
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: series.color }} />
-                      <span className="text-sm font-bold text-white group-hover:text-accent transition-colors">{series.title}</span>
+                      <span className="text-sm font-bold text-main group-hover:text-accent transition-colors">{series.title}</span>
                     </button>
                   ))}
                   
@@ -2539,13 +2733,13 @@ export default function App() {
                     className="w-full p-4 rounded-2xl border border-dashed border-border hover:border-accent hover:bg-accent/5 transition-all flex items-center gap-4 group"
                   >
                     <Plus className="w-4 h-4 text-accent" />
-                    <span className="text-sm font-bold text-text-muted group-hover:text-accent transition-colors">Create New Collection</span>
+                    <span className="text-sm font-bold text-muted group-hover:text-accent transition-colors">Create New Collection</span>
                   </button>
                 </div>
                 
                 <button 
                   onClick={() => handleMoveToSeries("")}
-                  className="text-[10px] uppercase tracking-widest text-text-muted hover:text-white transition-colors w-full text-center py-2"
+                  className="text-[10px] uppercase tracking-widest text-muted hover:text-main transition-colors w-full text-center py-2"
                 >
                   No Collection (Standalone Book)
                 </button>
@@ -2576,7 +2770,7 @@ export default function App() {
               >
                 <button 
                   onClick={() => setSelectedBookForDetail(null)} 
-                  className="fixed md:absolute top-6 left-6 p-2 text-white/70 hover:text-white transition-colors z-[100]"
+                  className="fixed md:absolute top-6 left-6 p-2 text-main/70 hover:text-main transition-colors z-[100]"
                 >
                   <ChevronLeft className="w-6 h-6" />
                 </button>
@@ -2591,19 +2785,19 @@ export default function App() {
                       setIsEditingBookDetail(true);
                       setTimeout(() => fileInputRef.current?.click(), 100);
                     }}
-                    className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-black/60 backdrop-blur-md border border-white/10 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-all shadow-xl"
+                    className="absolute bottom-2 right-2 w-10 h-10 rounded-full bg-black/60 backdrop-blur-md border border-border flex items-center justify-center text-main opacity-0 group-hover:opacity-100 transition-all shadow-xl"
                   >
                     <Edit3 className="w-5 h-5" />
                   </button>
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-3xl font-serif font-black text-white tracking-tighter leading-tight">{currentBookDetail.title}</h3>
+                  <h3 className="text-3xl font-serif font-black text-main tracking-tighter leading-tight">{currentBookDetail.title}</h3>
                   <div className="flex items-center justify-center gap-2">
                     <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center overflow-hidden shrink-0">
                       {user?.photoURL ? <img src={user.photoURL} className="w-full h-full object-cover" /> : <UserIcon className="w-3 h-3 text-accent" />}
                     </div>
-                    <p className="text-white font-bold text-sm">{currentBookDetail.author}</p>
+                    <p className="text-main font-bold text-sm">{currentBookDetail.author}</p>
                   </div>
                   <div className="flex justify-center pt-1">
                     <StarRating 
@@ -2640,7 +2834,7 @@ export default function App() {
                           setIsSelectSeriesModalOpen(true);
                           setSelectedBookForDetail(null);
                         }}
-                        className="w-14 h-14 rounded-full bg-green-500 text-white flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+                        className="w-14 h-14 rounded-full bg-green-500 text-bg flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
                       >
                         <CheckCircle2 className="w-7 h-7" />
                       </button>
@@ -2681,10 +2875,10 @@ export default function App() {
                 <div className="bg-surface/30 rounded-2xl p-6 space-y-4">
                   <div className="flex justify-between items-end">
                     <div className="space-y-1">
-                      <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Reading Progress</span>
-                      <p className="text-2xl font-black text-white">{Math.round((currentBookDetail.currentPage / currentBookDetail.totalPages) * 100)}%</p>
+                      <span className="text-[10px] font-bold text-muted uppercase tracking-widest">Reading Progress</span>
+                      <p className="text-2xl font-black text-main">{Math.round((currentBookDetail.currentPage / currentBookDetail.totalPages) * 100)}%</p>
                     </div>
-                    <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest">{currentBookDetail.currentPage} / {currentBookDetail.totalPages} pages</p>
+                    <p className="text-[10px] font-bold text-muted uppercase tracking-widest">{currentBookDetail.currentPage} / {currentBookDetail.totalPages} pages</p>
                   </div>
                   <ProgressInput 
                     bookId={currentBookDetail.id}
@@ -2697,8 +2891,8 @@ export default function App() {
                 {/* Chapters Section */}
                 <div className="space-y-6">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-lg font-black text-white tracking-tight">Chapters & Notes</h4>
-                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-widest">{currentBookDetail.chapters?.length || 0} entries</span>
+                    <h4 className="text-lg font-black text-main tracking-tight">Chapters & Notes</h4>
+                    <span className="text-[10px] font-bold text-muted uppercase tracking-widest">{currentBookDetail.chapters?.length || 0} entries</span>
                   </div>
                   
                   {currentBookDetail.chapters && currentBookDetail.chapters.length > 0 ? (
@@ -2708,17 +2902,17 @@ export default function App() {
                           key={`chapter-item-${chapter.id}-${idx}`}
                           className="group flex items-start gap-4 p-4 rounded-xl hover:bg-white/5 transition-all cursor-default"
                         >
-                          <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-[10px] font-bold text-text-muted shrink-0">
+                          <div className="w-8 h-8 rounded-lg bg-surface flex items-center justify-center text-[10px] font-bold text-muted shrink-0">
                             {idx + 1}
                           </div>
                           <div className="flex-1 min-w-0 space-y-1">
-                            <h5 className="text-sm font-bold text-white truncate">{chapter.title}</h5>
-                            <p className="text-xs text-text-muted line-clamp-2 leading-relaxed">{chapter.notes}</p>
-                            <span className="text-[9px] text-text-muted/50 font-medium">{new Date(chapter.timestamp).toLocaleDateString()}</span>
+                            <h5 className="text-sm font-bold text-main truncate">{chapter.title}</h5>
+                            <p className="text-xs text-muted line-clamp-2 leading-relaxed">{chapter.notes}</p>
+                            <span className="text-[9px] text-muted/50 font-medium">{new Date(chapter.timestamp).toLocaleDateString()}</span>
                           </div>
                           <button 
                             onClick={() => deleteChapter(currentBookDetail.id, chapter.id)}
-                            className="p-2 text-text-muted opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
+                            className="p-2 text-muted opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -2726,7 +2920,7 @@ export default function App() {
                       ))}
                     </div>
                   ) : (
-                    <div className="py-12 flex flex-col items-center justify-center gap-4 text-text-muted border-2 border-dashed border-white/5 rounded-3xl">
+                    <div className="py-12 flex flex-col items-center justify-center gap-4 text-muted border-2 border-dashed border-border rounded-3xl">
                       <BookOpen className="w-10 h-10 opacity-20" />
                       <p className="text-xs font-bold uppercase tracking-widest opacity-50">No chapters recorded</p>
                     </div>
@@ -2743,9 +2937,9 @@ export default function App() {
                     exit={{ opacity: 0, y: '100%' }}
                     className="absolute inset-0 bg-bg z-50 flex flex-col"
                   >
-                    <div className="p-6 border-b border-white/5 flex justify-between items-center bg-surface/30 backdrop-blur-md">
-                      <h3 className="text-xl font-black text-white tracking-tight">Edit Book</h3>
-                      <button onClick={() => setIsEditingBookDetail(false)} className="p-2 text-text-muted hover:text-white"><X className="w-5 h-5" /></button>
+                    <div className="p-6 border-b border-border flex justify-between items-center bg-surface/30 backdrop-blur-md">
+                      <h3 className="text-xl font-black text-main tracking-tight">Edit Book</h3>
+                      <button onClick={() => setIsEditingBookDetail(false)} className="p-2 text-muted hover:text-main"><X className="w-5 h-5" /></button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-hide">
                       <div className="flex gap-6 items-start">
@@ -2757,46 +2951,46 @@ export default function App() {
                             <>
                               <img src={editedBook.coverUrl} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2">
-                                <Upload className="w-5 h-5 text-white" />
+                                <Upload className="w-5 h-5 text-bg" />
                               </div>
                             </>
                           ) : (
                             <>
-                              <ImageIcon className="w-6 h-6 text-text-muted group-hover:text-accent transition-colors" />
-                              <span className="text-[8px] font-bold uppercase tracking-widest text-text-muted group-hover:text-accent">Upload</span>
+                              <ImageIcon className="w-6 h-6 text-muted group-hover:text-accent transition-colors" />
+                              <span className="text-[8px] font-bold uppercase tracking-widest text-muted group-hover:text-accent">Upload</span>
                             </>
                           )}
                         </div>
                         <div className="flex-1 space-y-4">
                           <div className="space-y-2">
-                            <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Title</label>
+                            <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Title</label>
                             <input value={editedBook.title} onChange={e => setEditedBook({...editedBook, title: e.target.value})} className="input-field text-sm" />
                           </div>
                           <div className="space-y-2">
-                            <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Author</label>
+                            <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Author</label>
                             <input value={editedBook.author} onChange={e => setEditedBook({...editedBook, author: e.target.value})} className="input-field text-sm" />
                           </div>
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Current Page</label>
+                          <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Current Page</label>
                           <input type="number" value={editedBook.currentPage} onChange={e => setEditedBook({...editedBook, currentPage: parseInt(e.target.value) || 0})} className="input-field text-sm" />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Total Pages</label>
+                          <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Total Pages</label>
                           <input type="number" value={editedBook.totalPages} onChange={e => setEditedBook({...editedBook, totalPages: parseInt(e.target.value) || 0})} className="input-field text-sm" />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Collection</label>
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Collection</label>
                         <select value={editedBook.seriesId || ""} onChange={e => setEditedBook({...editedBook, seriesId: e.target.value})} className="input-field text-sm">
                           <option value="">No Collection</option>
                           {seriesList.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
                         </select>
                       </div>
                     </div>
-                    <div className="p-6 border-t border-white/5 bg-surface/30 backdrop-blur-md">
+                    <div className="p-6 border-t border-border bg-surface/30 backdrop-blur-md">
                       <button 
                         onClick={handleUpdateBook}
                         disabled={isSaving}
@@ -2816,16 +3010,16 @@ export default function App() {
         {isScanning && (
           <div key="scanning-modal-container" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setIsScanning(false)} className="absolute inset-0 bg-bg/90 backdrop-blur-xl" />
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative w-full max-w-md bg-surface border border-white/10 rounded-[32px] p-8 shadow-2xl overflow-hidden">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="relative w-full max-w-md bg-surface border border-border rounded-[32px] p-8 shadow-2xl overflow-hidden">
               <div className="flex justify-between items-center mb-8">
                 <div className="space-y-1">
-                  <h3 className="text-2xl font-serif font-bold text-white">Scan Barcode</h3>
-                  <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold">Point your camera at the barcode</p>
+                  <h3 className="text-2xl font-serif font-bold text-main">Scan Barcode</h3>
+                  <p className="text-[10px] text-muted uppercase tracking-widest font-bold">Point your camera at the barcode</p>
                 </div>
-                <button onClick={() => setIsScanning(false)} className="p-2 text-text-muted hover:text-white transition-colors"><X className="w-6 h-6" /></button>
+                <button onClick={() => setIsScanning(false)} className="p-2 text-muted hover:text-main transition-colors"><X className="w-6 h-6" /></button>
               </div>
               
-              <div className="rounded-2xl overflow-visible border border-white/10 bg-black/40 relative">
+              <div className="rounded-2xl overflow-visible border border-border bg-black/40 relative">
                 <BarcodeScanner 
                   onScanSuccess={(isbn) => {
                     console.log("Barcode scanned successfully:", isbn);
@@ -2875,9 +3069,9 @@ export default function App() {
               <div className="w-14 h-14 bg-accent/10 text-accent rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Library className="w-7 h-7" />
               </div>
-              <h3 className="text-xl font-serif font-bold mb-2 text-white">Already Owned</h3>
-              <p className="text-text-muted text-sm mb-8 leading-relaxed">
-                You already have <span className="text-white font-bold italic">"{duplicateBook.title}"</span> in your library.
+              <h3 className="text-xl font-serif font-bold mb-2 text-main">Already Owned</h3>
+              <p className="text-muted text-sm mb-8 leading-relaxed">
+                You already have <span className="text-main font-bold italic">"{duplicateBook.title}"</span> in your library.
               </p>
               <div className="flex flex-col gap-3">
                 <button 
@@ -2891,7 +3085,7 @@ export default function App() {
                 </button>
                 <button 
                   onClick={() => setDuplicateBook(null)}
-                  className="w-full py-4 text-text-muted hover:text-white font-bold transition-colors text-sm"
+                  className="w-full py-4 text-muted hover:text-main font-bold transition-colors text-sm"
                 >
                   Dismiss
                 </button>
