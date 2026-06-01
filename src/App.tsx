@@ -3,6 +3,7 @@ import { useState, useEffect, FormEvent, useMemo, Component, ErrorInfo, ReactNod
 import { motion, AnimatePresence } from "motion/react";
 import { 
   Plus, 
+  Minus,
   Library, 
   CheckCircle2, 
   Circle, 
@@ -151,46 +152,102 @@ const ProgressInput = ({ bookId, currentPage, totalPages, onUpdate }: { bookId: 
         </div>
       </div>
 
-      <div className="relative h-12 w-full flex items-center cursor-pointer touch-none"
-        ref={sliderRef}
-        onMouseDown={handleStart}
-        onTouchStart={handleStart}
-      >
-        {/* Background Track with Ticks */}
-        <div className="h-3 w-full bg-white/5 rounded-full relative overflow-hidden border border-white/5">
-          <div 
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-accent/40 to-accent rounded-full transition-all duration-75 shadow-[0_0_15px_rgba(230,168,215,0.3)]"
-            style={{ width: `${progress}%` }}
-          />
-          {/* Subtle Ticks */}
-          <div className="absolute inset-0 flex justify-between px-4 pointer-events-none opacity-20">
-            {[...Array(10)].map((_, i) => (
-              <div key={i} className="w-[1px] h-full bg-white/20" />
-            ))}
-          </div>
-        </div>
-        
-        {/* Enhanced Handle */}
-        <div 
-          className={`absolute top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center transition-all z-10 ${isDragging ? 'scale-110' : 'scale-100'}`}
-          style={{ left: `calc(${progress}% - 16px)` }}
+      <div className="flex items-center gap-3">
+        <button 
+          onPointerDown={(e) => { 
+            e.stopPropagation();
+            let currentVal = localValue;
+            const updateVal = () => {
+              setLocalValue(prev => {
+                const newVal = Math.max(0, prev - 1);
+                currentVal = newVal;
+                return newVal;
+              })
+            };
+            updateVal();
+            const interval = setInterval(updateVal, 100);
+            const stop = () => { 
+                clearInterval(interval); 
+                onUpdate(bookId, currentVal);
+                document.removeEventListener('pointerup', stop);
+                document.removeEventListener('pointerleave', stop);
+            };
+            document.addEventListener('pointerup', stop);
+            document.addEventListener('pointerleave', stop);
+          }}
+          className="w-10 h-10 rounded-full bg-surface hover:bg-surface-hover flex items-center justify-center text-main transition-all shrink-0 card touch-none select-none"
         >
-          <div className="absolute inset-0 bg-accent rounded-full blur-md opacity-20 animate-pulse" />
-          <div className="relative w-6 h-6 bg-white rounded-full shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center border-2 border-accent">
-            <div className="flex gap-0.5">
-              <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
-              <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
-              <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
+          <Minus className="w-4 h-4 pointer-events-none" />
+        </button>
+        
+        <div className="relative h-12 w-full flex items-center cursor-pointer touch-none"
+          ref={sliderRef}
+          onMouseDown={handleStart}
+          onTouchStart={handleStart}
+        >
+          {/* Background Track with Ticks */}
+          <div className="h-3 w-full bg-white/5 rounded-full relative overflow-hidden border border-white/5">
+            <div 
+              className="absolute top-0 left-0 h-full bg-gradient-to-r from-accent/40 to-accent rounded-full transition-all duration-75 shadow-[0_0_15px_rgba(230,168,215,0.3)]"
+              style={{ width: `${progress}%` }}
+            />
+            {/* Subtle Ticks */}
+            <div className="absolute inset-0 flex justify-between px-4 pointer-events-none opacity-20">
+              {[...Array(10)].map((_, i) => (
+                <div key={i} className="w-[1px] h-full bg-white/20" />
+              ))}
             </div>
           </div>
           
-          {/* Floating Value Tooltip */}
-          {isDragging && (
-            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-accent text-bg px-3 py-1 rounded-lg font-black text-xs shadow-xl whitespace-nowrap">
-              {localValue}
+          {/* Enhanced Handle */}
+          <div 
+            className={`absolute top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center transition-all z-10 ${isDragging ? 'scale-110' : 'scale-100'}`}
+            style={{ left: `calc(${progress}% - 16px)` }}
+          >
+            <div className="absolute inset-0 bg-accent rounded-full blur-md opacity-20 animate-pulse" />
+            <div className="relative w-6 h-6 bg-white rounded-full shadow-[0_0_20px_rgba(0,0,0,0.5)] flex items-center justify-center border-2 border-accent">
+              <div className="flex gap-0.5">
+                <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
+                <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
+                <div className="w-0.5 h-2 bg-accent/30 rounded-full" />
+              </div>
             </div>
-          )}
+            
+            {/* Floating Value Tooltip */}
+            {isDragging && (
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-accent text-bg px-3 py-1 rounded-lg font-black text-xs shadow-xl whitespace-nowrap">
+                {localValue}
+              </div>
+            )}
+          </div>
         </div>
+
+        <button 
+          onPointerDown={(e) => { 
+            e.stopPropagation();
+            let currentVal = localValue;
+            const updateVal = () => {
+              setLocalValue(prev => {
+                const newVal = Math.min(totalPages, prev + 1);
+                currentVal = newVal;
+                return newVal;
+              })
+            };
+            updateVal();
+            const interval = setInterval(updateVal, 100);
+            const stop = () => { 
+                clearInterval(interval); 
+                onUpdate(bookId, currentVal);
+                document.removeEventListener('pointerup', stop);
+                document.removeEventListener('pointerleave', stop);
+            };
+            document.addEventListener('pointerup', stop);
+            document.addEventListener('pointerleave', stop);
+          }}
+          className="w-10 h-10 rounded-full bg-surface hover:bg-surface-hover flex items-center justify-center text-main transition-all shrink-0 card touch-none select-none"
+        >
+          <Plus className="w-4 h-4 pointer-events-none" />
+        </button>
       </div>
       
       <div className="flex justify-between items-center mt-2">
@@ -269,7 +326,7 @@ const BookCard = React.memo(({ book, onClick, updateProgress, onMove, isFirst, i
 const SeriesCardHorizontal = ({ series, onClick, progress }: { series: Series, onClick: () => void, progress: number, key?: React.Key }) => (
   <div 
     onClick={onClick}
-    className="flex items-center gap-2 bg-white/5 hover:bg-white/10 rounded-card overflow-hidden cursor-pointer transition-all active:scale-[0.98] group relative"
+    className="flex items-center gap-2 card overflow-hidden cursor-pointer transition-all active:scale-[0.98] group relative"
   >
     <div className="w-14 h-14 flex-shrink-0 bg-surface-hover shadow-lg relative">
       {series.coverUrl ? (
@@ -292,7 +349,7 @@ const SeriesCardHorizontal = ({ series, onClick, progress }: { series: Series, o
 const SeriesCardSquare = ({ series, onClick, progress }: { series: Series, onClick: () => void, progress: number, key?: React.Key }) => (
   <div 
     onClick={onClick}
-    className="flex flex-col gap-2 p-3 rounded-card bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-36 flex-shrink-0"
+    className="flex flex-col gap-2 p-3 card transition-all cursor-pointer group w-36 flex-shrink-0"
   >
     <div className="aspect-square w-full rounded-card overflow-hidden shadow-2xl relative">
       {series.coverUrl ? (
@@ -317,114 +374,6 @@ const SeriesCardSquare = ({ series, onClick, progress }: { series: Series, onCli
     </div>
   </div>
 );
-
-const BookSpine = ({ book, onClick }: { book: Book, onClick: () => void, key?: React.Key }) => {
-  const colors = [
-    '#f4a261', '#e76f51', '#2a9d8f', '#264653', 
-    '#e9c46a', '#8ab17d', '#b5838d', '#6d597a',
-    '#457b9d', '#1d3557', '#a8dadc', '#f1faee'
-  ];
-  const colorIndex = (book.title.length + book.author.length) % colors.length;
-  const spineColor = colors[colorIndex];
-  const isRead = book.currentPage >= book.totalPages && book.totalPages > 0;
-
-  return (
-    <motion.div 
-      whileHover={{ y: -5, scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-      onClick={onClick}
-      className="relative flex flex-col items-center justify-end cursor-pointer group shrink-0"
-      style={{ width: '32px', height: '140px' }}
-    >
-      {/* Spine Body */}
-      <div 
-        className={`absolute inset-0 rounded-sm shadow-lg transition-all ${isRead ? 'opacity-60 grayscale-[0.5]' : ''}`}
-        style={{ backgroundColor: spineColor }}
-      >
-        {/* Texture/Lines */}
-        <div className="absolute inset-y-0 left-1 w-[1px] bg-black/10" />
-        <div className="absolute inset-y-0 right-1 w-[1px] bg-black/10" />
-        <div className="absolute top-2 inset-x-0 h-[1px] bg-white/20" />
-        <div className="absolute bottom-2 inset-x-0 h-[1px] bg-white/20" />
-      </div>
-
-      {/* Vertical Title */}
-      <div className="relative z-10 h-full flex items-center justify-center py-4">
-        <span 
-          className="text-[9px] font-black text-white/90 uppercase tracking-widest whitespace-nowrap rotate-90 origin-center pointer-events-none"
-          style={{ textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
-        >
-          {book.title.length > 20 ? book.title.substring(0, 17) + '...' : book.title}
-        </span>
-      </div>
-
-      {/* Progress Indicator */}
-      {book.totalPages > 0 && !isRead && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/20 rounded-b-sm overflow-hidden">
-          <div 
-            className="h-full bg-white/40" 
-            style={{ width: `${(book.currentPage / book.totalPages) * 100}%` }} 
-          />
-        </div>
-      )}
-    </motion.div>
-  );
-};
-
-const ShelfDecoration = ({ type, position }: { type: 'plant1' | 'plant2' | 'dragon1' | 'toy', position: 'left' | 'right' }) => {
-  const urls = {
-    plant1: "https://img.icons8.com/emoji/512/potted-plant-emoji.png",
-    plant2: "https://img.icons8.com/emoji/512/cactus-emoji.png",
-    dragon1: "https://img.icons8.com/color/512/dragon.png",
-    toy: "https://img.icons8.com/color/512/teddy-bear.png"
-  };
-
-  const size = type.includes('dragon') || type === 'toy' ? 'w-16 h-16' : 'w-12 h-12';
-  const yOffset = 'translate-y-1';
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className={`shrink-0 ${size} ${yOffset} ${position === 'left' ? 'mr-1' : 'ml-1'} flex items-end justify-center`}
-    >
-      <img 
-        src={urls[type]} 
-        className="w-full h-full object-contain drop-shadow-md" 
-        referrerPolicy="no-referrer"
-        alt={type}
-      />
-    </motion.div>
-  );
-};
-
-const Shelf = ({ children, title }: { children: React.ReactNode, title?: string, key?: React.Key }) => {
-  // Randomly select decorations for this shelf
-  const leftDeco = React.useMemo(() => {
-    const types: ('plant1' | 'plant2' | 'dragon1' | 'toy')[] = ['plant1', 'plant2', 'dragon1', 'toy'];
-    return types[Math.floor(Math.random() * types.length)];
-  }, []);
-
-  const rightDeco = React.useMemo(() => {
-    const types: ('plant1' | 'plant2' | 'dragon1' | 'toy')[] = ['plant1', 'plant2', 'dragon1', 'toy'];
-    return types[Math.floor(Math.random() * types.length)];
-  }, []);
-
-  return (
-    <div className="space-y-2 mb-10">
-      {title && <h3 className="text-xs font-bold text-muted uppercase tracking-[0.2em] px-2">{title}</h3>}
-      <div className="relative pt-4">
-        <div className="flex items-end gap-0.5 px-2 overflow-x-auto scrollbar-hide min-h-[150px] pb-1">
-          <ShelfDecoration type={leftDeco} position="left" />
-          {children}
-          <ShelfDecoration type={rightDeco} position="right" />
-        </div>
-        {/* The actual shelf wood/line */}
-        <div className="h-3 w-full bg-gradient-to-b from-[#3d2b1f] to-[#2a1d15] rounded-sm shadow-xl border-t border-white/5" />
-      </div>
-    </div>
-  );
-};
 
 const BookListItem = React.memo(({ book, onClick, onMore }: { 
   book: Book; 
@@ -1163,7 +1112,8 @@ export default function App() {
     const newChapter: Chapter = {
       id: `chapter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: title || `Chapter ${(book.chapters?.length || 0) + 1}`,
-      notes: notes || ""
+      notes: notes || "",
+      timestamp: new Date().toISOString()
     };
 
     const updatedChapters = [...(book.chapters || []), newChapter];
@@ -1738,51 +1688,37 @@ export default function App() {
                             </div>
 
                             {/* Books List Header */}
-                            {theme !== 'dragon' && (
-                              <div className="px-6 py-2 border-b border-border grid grid-cols-[44px_1fr_48px] gap-4 text-[10px] font-bold text-muted uppercase tracking-widest">
-                                <div className="text-center">#</div>
-                                <div>Title</div>
-                                <div className="text-right"><Clock className="w-3 h-3 ml-auto" /></div>
-                              </div>
-                            )}
+                            <div className="px-6 py-2 border-b border-border grid grid-cols-[44px_1fr_48px] gap-4 text-[10px] font-bold text-muted uppercase tracking-widest">
+                              <div className="text-center">#</div>
+                              <div>Title</div>
+                              <div className="text-right"><Clock className="w-3 h-3 ml-auto" /></div>
+                            </div>
 
                             {/* Books List */}
                             <div className="space-y-1">
-                              {theme === 'dragon' ? (
-                                <Shelf>
-                                  {seriesBooks.map(book => (
-                                    <BookSpine 
-                                      key={book.id} 
-                                      book={book} 
-                                      onClick={() => setSelectedBookForDetail(book)} 
+                              <DndContext 
+                                sensors={sensors}
+                                collisionDetection={closestCenter}
+                                onDragEnd={handleDragEnd}
+                              >
+                                <SortableContext 
+                                  items={seriesBooks.map(b => b.id)}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  {seriesBooks.map((book, idx) => (
+                                    <SortableBookItem
+                                      key={book.id}
+                                      book={book}
+                                      idx={idx}
+                                      onClick={() => setSelectedBookForDetail(book)}
+                                      onMore={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedBookForDetail(book);
+                                      }}
                                     />
                                   ))}
-                                </Shelf>
-                              ) : (
-                                <DndContext 
-                                  sensors={sensors}
-                                  collisionDetection={closestCenter}
-                                  onDragEnd={handleDragEnd}
-                                >
-                                  <SortableContext 
-                                    items={seriesBooks.map(b => b.id)}
-                                    strategy={verticalListSortingStrategy}
-                                  >
-                                    {seriesBooks.map((book, idx) => (
-                                      <SortableBookItem
-                                        key={book.id}
-                                        book={book}
-                                        idx={idx}
-                                        onClick={() => setSelectedBookForDetail(book)}
-                                        onMore={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedBookForDetail(book);
-                                        }}
-                                      />
-                                    ))}
-                                  </SortableContext>
-                                </DndContext>
-                              )}
+                                </SortableContext>
+                              </DndContext>
                               <button 
                                 onClick={() => {
                                   setNewBook({ ...newBook, seriesId: series.id, isWishlist: false, coverUrl: "" });
@@ -1865,48 +1801,36 @@ export default function App() {
                           {/* Recently Updated (Books) */}
                           <section className="space-y-4">
                             <h2 className="text-xl font-black text-main tracking-tight">Recently Updated</h2>
-                            {theme === 'dragon' ? (
-                              <Shelf>
-                                {ownedBooks.slice(0, 20).map((book) => (
-                                  <BookSpine 
-                                    key={book.id} 
-                                    book={book} 
-                                    onClick={() => setSelectedBookForDetail(book)} 
-                                  />
-                                ))}
-                              </Shelf>
-                            ) : (
-                              <div 
-                                ref={recentScrollRef}
-                                onMouseDown={handleRecentMouseDown}
-                                onMouseLeave={() => setIsDraggingRecent(false)}
-                                onMouseUp={() => setIsDraggingRecent(false)}
-                                onMouseMove={handleRecentMouseMove}
-                                className={`flex items-start gap-4 overflow-x-auto pb-4 spotify-scrollbar ${isDraggingRecent ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
-                              >
-                                {ownedBooks.slice(0, 10).map((book) => (
-                                  <div 
-                                    key={book.id}
-                                    onClick={() => !isDraggingRecent && setSelectedBookForDetail(book)}
-                                    className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group w-32 shrink-0"
-                                  >
-                                    <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
-                                      <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      <h3 className="text-[11px] font-bold text-main truncate">{book.title}</h3>
-                                      <p className="text-[9px] text-muted truncate">{book.author}</p>
-                                    </div>
+                            <div 
+                              ref={recentScrollRef}
+                              onMouseDown={handleRecentMouseDown}
+                              onMouseLeave={() => setIsDraggingRecent(false)}
+                              onMouseUp={() => setIsDraggingRecent(false)}
+                              onMouseMove={handleRecentMouseMove}
+                              className={`flex items-start gap-4 overflow-x-auto pb-4 spotify-scrollbar ${isDraggingRecent ? 'cursor-grabbing select-none' : 'cursor-grab'}`}
+                            >
+                              {ownedBooks.slice(0, 10).map((book) => (
+                                <div 
+                                  key={book.id}
+                                  onClick={() => !isDraggingRecent && setSelectedBookForDetail(book)}
+                                  className="flex flex-col gap-2 p-3 card transition-all cursor-pointer group w-32 shrink-0"
+                                >
+                                  <div className="aspect-[2/3] w-full rounded-card overflow-hidden shadow-2xl relative">
+                                    <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                   </div>
-                                ))}
-                                <div className="w-4 shrink-0" /> {/* Spacer for end of scroll */}
-                              </div>
-                            )}
+                                  <div className="space-y-0.5">
+                                    <h3 className="text-[11px] font-bold text-main truncate">{book.title}</h3>
+                                    <p className="text-[9px] text-muted truncate">{book.author}</p>
+                                  </div>
+                                </div>
+                              ))}
+                              <div className="w-4 shrink-0" /> {/* Spacer for end of scroll */}
+                            </div>
                           </section>
                         </div>
                       )}
 
-                      {libraryFilter === "Collections" && (
+                          {libraryFilter === "Collections" && (
                         <div className="space-y-6">
                           <div className="flex items-center justify-between">
                             <h2 className="text-2xl font-black text-main tracking-tight">All Collections</h2>
@@ -1917,36 +1841,16 @@ export default function App() {
                               + New Collection
                             </button>
                           </div>
-                          {theme === 'dragon' ? (
-                            <div className="space-y-2">
-                              {seriesList.map((series) => {
-                                const seriesBooks = books.filter(b => b.seriesId === series.id);
-                                if (seriesBooks.length === 0) return null;
-                                return (
-                                  <Shelf key={series.id} title={series.title}>
-                                    {seriesBooks.map(book => (
-                                      <BookSpine 
-                                        key={book.id} 
-                                        book={book} 
-                                        onClick={() => setSelectedBookForDetail(book)} 
-                                      />
-                                    ))}
-                                  </Shelf>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                              {seriesList.map((series) => (
-                                <SeriesCardHorizontal 
-                                  key={series.id} 
-                                  series={series} 
-                                  onClick={() => setViewingSeriesId(series.id)} 
-                                  progress={getSeriesProgress(series.id)}
-                                />
-                              ))}
-                            </div>
-                          )}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                            {seriesList.map((series) => (
+                              <SeriesCardHorizontal 
+                                key={series.id} 
+                                series={series} 
+                                onClick={() => setViewingSeriesId(series.id)} 
+                                progress={getSeriesProgress(series.id)}
+                              />
+                            ))}
+                          </div>
                         </div>
                       )}
 
@@ -1969,9 +1873,9 @@ export default function App() {
                               <div 
                                 key={book.id}
                                 onClick={() => setSelectedBookForDetail(book)}
-                                className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group"
+                                className="flex flex-col gap-2 p-3 card transition-all cursor-pointer group"
                               >
-                                <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
+                                <div className="aspect-[2/3] w-full rounded-card overflow-hidden shadow-2xl relative">
                                   <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 </div>
                                 <div className="space-y-0.5">
@@ -1998,35 +1902,23 @@ export default function App() {
                               + Add Dragon Book
                             </button>
                           </div>
-                          {theme === 'dragon' ? (
-                            <Shelf>
-                              {dragonBooks.map((book) => (
-                                <BookSpine 
-                                  key={book.id} 
-                                  book={book} 
-                                  onClick={() => setSelectedBookForDetail(book)} 
-                                />
-                              ))}
-                            </Shelf>
-                          ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                              {dragonBooks.map((book) => (
-                                <div 
-                                  key={book.id}
-                                  onClick={() => setSelectedBookForDetail(book)}
-                                  className="flex flex-col gap-2 p-3 rounded-xl bg-surface hover:bg-surface-hover transition-all cursor-pointer group"
-                                >
-                                  <div className="aspect-[2/3] w-full rounded-lg overflow-hidden shadow-2xl relative">
-                                    <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                                  </div>
-                                  <div className="space-y-0.5">
-                                    <h3 className="text-[11px] font-bold text-main truncate">{book.title}</h3>
-                                    <p className="text-[9px] text-muted truncate">{book.author}</p>
-                                  </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                            {dragonBooks.map((book) => (
+                              <div 
+                                key={book.id}
+                                onClick={() => setSelectedBookForDetail(book)}
+                                className="flex flex-col gap-2 p-3 card transition-all cursor-pointer group"
+                              >
+                                <div className="aspect-[2/3] w-full rounded-card overflow-hidden shadow-2xl relative">
+                                  <img src={book.coverUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                                 </div>
-                              ))}
-                            </div>
-                          )}
+                                <div className="space-y-0.5">
+                                  <h3 className="text-[11px] font-bold text-main truncate">{book.title}</h3>
+                                  <p className="text-[9px] text-muted truncate">{book.author}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2516,7 +2408,7 @@ export default function App() {
         )}
 
         {isAddChapterModalOpen && (
-          <div key="add-chapter-modal-container" className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div key="add-chapter-modal-container" className="fixed inset-0 z-[110] flex items-center justify-center p-4">
             <motion.div 
               key="add-chapter-modal-overlay"
               initial={{ opacity: 0 }} 
@@ -2540,7 +2432,6 @@ export default function App() {
                 <div className="space-y-2">
                   <label className="text-[10px] uppercase tracking-[0.2em] text-muted font-bold">Chapter Title</label>
                   <input 
-                    required 
                     value={newChapterData.title} 
                     onChange={e => setNewChapterData({...newChapterData, title: e.target.value})} 
                     className="input-field" 
@@ -2907,8 +2798,10 @@ export default function App() {
                           </div>
                           <div className="flex-1 min-w-0 space-y-1">
                             <h5 className="text-sm font-bold text-main truncate">{chapter.title}</h5>
-                            <p className="text-xs text-muted line-clamp-2 leading-relaxed">{chapter.notes}</p>
-                            <span className="text-[9px] text-muted/50 font-medium">{new Date(chapter.timestamp).toLocaleDateString()}</span>
+                            <p className="text-xs text-muted leading-relaxed whitespace-pre-wrap">{chapter.notes}</p>
+                            {chapter.timestamp && (
+                              <span className="text-[9px] text-muted/50 font-medium">{new Date(chapter.timestamp).toLocaleDateString()}</span>
+                            )}
                           </div>
                           <button 
                             onClick={() => deleteChapter(currentBookDetail.id, chapter.id)}

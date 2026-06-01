@@ -2,6 +2,7 @@ export interface Chapter {
   id: string;
   title: string;
   notes: string;
+  timestamp: string;
 }
 
 export interface JournalEntry {

@@ -55,18 +55,18 @@
 }
 
 [data-theme="dragon"] {
-  --font-serif: "Cinzel", serif;
-  --font-sans: "Lora", serif;
+  --font-serif: "Quicksand", sans-serif;
+  --font-sans: "Quicksand", sans-serif;
   --color-bg: #0d1a18;
-  --color-surface: #122b28;
-  --color-surface-hover: #1a3d38;
-  --color-accent: #e6a8d7;
+  --color-surface: #152b27;
+  --color-surface-hover: #1e3d38;
+  --color-accent: #ff7eb3;
   --color-text-main: #ffffff;
-  --color-text-muted: #8ba8a4;
-  --color-border: rgba(230, 168, 215, 0.1);
-  --radius-card: 0.5rem;
-  --radius-button: 0.25rem;
-  --card-border: 1px solid rgba(230, 168, 215, 0.2);
+  --color-text-muted: #a8d5cf;
+  --color-border: rgba(255, 126, 179, 0.15);
+  --radius-card: 2rem;
+  --radius-button: 1.5rem;
+  --card-border: 1px solid var(--color-border);
 }
 
 @theme {
@@ -109,7 +109,7 @@
   }
 
   .card {
-    @apply bg-surface rounded-card transition-all duration-300 hover:bg-surface-hover;
+    @apply bg-surface rounded-card transition-all duration-300 hover:bg-surface-hover shadow-sm;
     border: var(--card-border);
   }
   
