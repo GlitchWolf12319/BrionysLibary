@@ -2912,7 +2912,7 @@ export default function App() {
                 <button onClick={() => setIsScanning(false)} className="p-2 text-muted hover:text-main transition-colors"><X className="w-6 h-6" /></button>
               </div>
               
-              <div className="rounded-2xl overflow-visible border border-border bg-black/40 relative">
+              <div className="rounded-2xl overflow-visible border border-border bg-black/40 relative mb-6">
                 <BarcodeScanner 
                   onScanSuccess={(isbn) => {
                     console.log("Barcode scanned successfully:", isbn);
@@ -2923,7 +2923,33 @@ export default function App() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-8">
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Or enter ISBN manually" 
+                    value={newBook.isbn || ""} 
+                    onChange={(e) => setNewBook({ ...newBook, isbn: e.target.value })}
+                    className="input-field text-sm flex-1"
+                  />
+                  <button 
+                    onClick={() => {
+                      if (newBook.isbn) {
+                        setIsScanning(false);
+                        setIsAddBookModalOpen(true);
+                        fetchBookByISBN(newBook.isbn);
+                      }
+                    }}
+                    disabled={!newBook.isbn}
+                    className="px-4 py-2 bg-accent text-bg rounded-xl font-bold uppercase tracking-widest text-[10px] disabled:opacity-50 disabled:cursor-not-allowed hover:bg-opacity-90 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Search className="w-4 h-4" />
+                    Search
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mt-6">
                 <button 
                   onClick={() => {
                     setIsScanning(false);
